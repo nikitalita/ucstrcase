@@ -124,8 +124,8 @@ func loadCaseFolds() {
 }
 
 var buildTags = map[string]struct{ version, buildTags, filename, headername string }{
-	"13.0.0": {"13.0.0", "go1.16,!go1.21", "src/data.c", "include/constants.h"},
-	"15.0.0": {"15.0.0", "go1.21", "src/data.c", "include/constants.h"},
+	"13.0.0": {"13.0.0", "go1.16,!go1.21", "src/data.c", "src/data.h"},
+	"15.0.0": {"15.0.0", "go1.21", "src/data.c", "src/data.h"},
 }
 
 // tablesFileName is the names of the file to generate and is based off
@@ -1084,6 +1084,44 @@ typedef struct {
 	w.WriteString(s)
 }
 
+func writeDataSuffix(w *bytes.Buffer) {
+	const s = `
+	// clang-format on
+	foldPair getCaseFold(i){
+		if (i < 0 || i > sizeof(_CaseFolds) / sizeof(_CaseFolds[0]))
+			return (foldPair){0, 0};
+		return (foldPair){_CaseFolds[i].From, _CaseFolds[i].To};
+	}
+	
+	uint16_t * getFoldMap(int i){
+		if (i < 0 || i > sizeof(_FoldMap) / sizeof(_FoldMap[0]))
+			return 0;
+		return _FoldMap[i];
+	}
+`	
+	w.WriteString(s)
+}
+
+func writeHeaderSuffix(w *bytes.Buffer) {
+	const s = `
+extern const foldPair _CaseFolds[%d];
+extern const uint32_t _UpperLower[%d][2];
+extern const uint16_t _FoldMap[%d][4];
+extern const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower[%d];
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+foldPair getCaseFold(int i);
+uint16_t * getFoldMap(int i);
+
+#ifdef __cplusplus
+}
+#endif
+`
+	fmt.Fprintf(w, s, caseFoldSize, upperLowerTableSize, foldMapSize, foldMapSize)
+}
+
 func runCommand(dir string, args ...string) {
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
@@ -1938,16 +1976,18 @@ func realMain() int {
 		var hw bytes.Buffer
 
 		writeHeaderPrefix(&hw)
-		w.WriteString("\n\n#include <stdint.h>\n")
-		w.WriteString("\n\n#include <stddef.h>\n")
-		w.WriteString("\n\n#include \"constants.h\"\n\n")
+		w.WriteString("#include <stdint.h>\n")
+		w.WriteString("#include <stddef.h>\n")
+		w.WriteString("#include \"data.h\"\n")
+		w.WriteString("// clang-format off")
 
 		gen.WriteUnicodeVersion(&hw)
 
 		genCaseFolds(&w, &hw, *firstValidHash)
 		genUpperLowerTable(&w, &hw, *firstValidHash)
 		genFoldTable(&w, &hw, *firstValidHash)
-
+		writeDataSuffix(&w)
+		writeHeaderSuffix(&hw)
 		// writeGo(&w, tablesFile, buildTags)
 		// if *skipBuild {
 		// 	log.Println("gen: skipping go build")

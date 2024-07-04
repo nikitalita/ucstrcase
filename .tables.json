@@ -1,7 +1,7 @@
 {
     "data.c": {
         "filename": "data.c",
-        "header_filename": "include/constants.h",
+        "header_filename": "src/data.h",
         "unicode_version": "15.0.0",
         "cldr_version": "32",
         "case_fold_hash": "26ed8b8eee3e8fb11d5bc828b898e9b714fed8d34dea08089dde133d0b10fb04",

@@ -1,7 +1,6 @@
 
 #include <unicode/stringoptions.h>
 #include <stdio.h>
-#include <sys/time.h>
 #include <string.h>
 #include <ucstrcase.h>
 #include <string>
@@ -10,9 +9,7 @@
 #define U_SHOW_CPLUSPLUS_API 1
 #include <unicode/unistr.h>
 #include <unicode/uchar.h>
-
-#include "constants.h"
-
+#include "data.h"
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 2 // 2-percent chance of generating a UTF-8 character
 #define utf8_invalid_probability 20 // 1-percent chance of generating an invalid UTF-8 character
@@ -21,9 +18,6 @@
 #define STRING_SIZE 30
 #define locb 0x80
 #define hicb 0xBF
-
-extern const foldPair _CaseFolds[];
-extern const uint16_t _FoldMap[][4];
 
 typedef struct {
     unsigned char lo; // lowest value for second byte.
@@ -79,7 +73,22 @@ static const uint8_t first[256] = {
 	u_s2,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s4,u_s3,u_s3, // 0xE0-0xEF
 	u_s5,u_s6,u_s6,u_s6,u_s7,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx, // 0xF0-0xFF
 };
+#include <chrono>
 
+int64_t getCurrentMillis()
+{
+    using std::chrono::system_clock;
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+
+    // Convert duration to milliseconds
+    auto milliseconds
+        = std::chrono::duration_cast<std::chrono::milliseconds>(
+              duration)
+              .count();
+    
+    return milliseconds;
+}
 acceptRange getAcceptRange(uint8_t firstByte) {
     return bacceptRanges[first[firstByte]];
 }
@@ -206,15 +215,25 @@ char* generate_random_garbage(int length) {
 }
 
 enum testType{
-	UCSTRCASECMP,
+	UCSTRCASECMP = 0,
 	UCSTRCASECMP_N,
 	STRCASECMP,
   STRNCASECMP,
   ICU_CASE_CMP,
   ICU_CASE_CMP_N,
   MAX
-
 };
+
+const std::string funcNames[testType::MAX]= {
+	{"ucstrcasecmp"},
+	{"ucstrncasecmp"},
+	{"strcasecmp"},
+  {"strncasecmp"},
+  {"icu::UnicodeString::caseCompare"},
+  {"icu::UnicodeString::caseCompareBetween"},
+};
+
+
 int run_test(testType type, const char* a, const char* b,  int64_t len = -1, bool zero_is_matching = true) {
   int result = 0;
   switch (type) {
@@ -249,14 +268,7 @@ int run_test(testType type, const char* a, const char* b,  int64_t len = -1, boo
   return result;
 }
 
-const char * funcNames[testType::MAX]= {
-	"ucstrcasecmp",
-	"ucstrncasecmp"
-	"strcasecmp",
-  "strncasecmp",
-  "icu::UnicodeString::caseCompare",
-  "icu::UnicodeString::caseCompareBetween",
-};
+
 
 constexpr bool isNType(testType type){
 	return type % 2 == 1;
@@ -265,7 +277,7 @@ constexpr bool isNType(testType type){
 
 #define MAX_ERRORS 10
 void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_len = TABLE_SIZE, size_t string_length = 0, bool no_check_match = false, std::vector<testType> filters = {}){
-  struct timeval stop, start;
+  int64_t stop, start;
   const size_t table_mod = table_len;
 	const auto inc = i_plus_1_should_match ? 2 : 1;
 	const size_t iters = TABLE_SIZE * TABLE_TRAVERSALS * inc;
@@ -275,12 +287,12 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
 		filters = {UCSTRCASECMP, UCSTRCASECMP_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N};
   for (int i = 0; i < filters.size(); i++){
     testType type = (testType)filters[i];
-    if (string_length != 0 && isNType(type)){
+    if (string_length != 0 && (!isNType(type))){
       continue;
     } else if (string_length == 0 && isNType(type)){
       continue;
     }
-    gettimeofday(&start, NULL);
+    start = getCurrentMillis();
     int errors = 0;
     for (size_t i = 0; i < iters; i+=inc) {
       // worst case; string that matches
@@ -303,8 +315,8 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
         break;
       }
     }
-    gettimeofday(&stop, NULL);
-    printf("%s time : %lums\n", funcNames[type], (stop.tv_usec - start.tv_usec) / 1000 + (stop.tv_sec - start.tv_sec) * 1000);
+    stop = getCurrentMillis();
+    printf("%s time : %lldms\n", funcNames[type].c_str(), stop - start);
   }
 }
 
@@ -318,86 +330,24 @@ void test_icu(){
 
   const char * test1 = "Ḩ";
   const char * test2 = "ḩ";
-  icu::UnicodeString aicustr(test1);
-  icu::UnicodeString bicustr(test2);
+  const char * cyrillic1 = "ƂⰩⅯƂⰨⅮƁⰧⅭɃⰦⅬSⰥⅫŽⰤⅪŽⰣⅩŻⰢⅨŻⰡⅧŹⰠⅦŹⰟⅥŸⰞⅤŶⰝⅣŶⰜⅢŴⰛⅡŴⰚⅠŲⰙⅯŲⰘⅮŰⰗⅭŰⰖⅬŮⰕⅫŮⰔⅪŬⰓⅩŬⰒⅨŪⰑⅧŪⰐⅦŨⰏⅥŨⰎⅤŦⰍⅣŦⰌⅢŤⰋⅡŤⰊⅠŢⰉ";
+  // the above, but with a different case
+  const char * cyrillic2 = "ƃⱙⅿƃⱘⅾɓⱗⅽƀⱖⅼſⱕⅻžⱔⅺžⱓⅹżⱒⅸżⱑⅷźⱐⅶźⱏⅵÿⱎⅴŷⱍⅳŷⱌⅲŵⱋⅱŵⱊⅰųⱉⅿųⱈⅾűⱇⅽűⱆⅼůⱅⅻůⱄⅺŭⱃⅹŭⱂⅸūⱁⅷūⱀⅶũⰿⅵũⰾⅴŧⰽⅳŧⰼⅲťⰻⅱťⰺⅰţⰹ";
+
+  icu::UnicodeString aicustr(cyrillic1);
+  icu::UnicodeString bicustr(cyrillic2);
   auto result = aicustr.caseCompare(bicustr, U_FOLD_CASE_DEFAULT);
   if (result != 0){
     std::cout << "Error: icu::UnicodeString: no match for matching strings!!" << std::endl;
   }
 }
 
-
-void run_tests_n(const char **s, size_t len, bool no_check_not_match = false){
-    struct timeval stop, start;
-  const size_t table_mod = TABLE_SIZE - 1;
-  const size_t iters = TABLE_SIZE * 1000;
-  gettimeofday(&start, NULL);
-  // icu::UnicodeString::caseCompareFrom
-  for (size_t i = 0; i < iters; i++) {
-    // worst case; string that matches
-    const char* a = s[i%table_mod];
-    auto alen = len;
-    
-    const char* b = s[i%table_mod];
-    auto blen = len;
-
-    icu::UnicodeString aicustr(a, alen);
-    UErrorCode err;
-    int result = aicustr.caseCompareBetween(0, alen, a, 0, alen, 0);
-    if (result != 0){
-      printf("Error: icu::UnicodeString: no match for same string!!\n");
-    }
-    // best case; string that doesn't match
-    result = aicustr.caseCompareBetween(0, alen, b, 0, blen, 0);
-    if (!no_check_not_match && result == 0) {
-      std::cout << "Error: icu::UnicodeString: match for different strings!!" << std::endl;
-    }
-  }
-  gettimeofday(&stop, NULL);
-  printf("icu::UnicodeString::caseCompareBetween time : %lums\n", (stop.tv_usec - start.tv_usec) / 1000 + (stop.tv_sec - start.tv_sec) * 1000);
-
-
-
-
-  gettimeofday(&start, NULL);
-  for (size_t i = 0; i < iters; i++) {
-    // worst case; string that matches
-    if (!(ucstrncasecmp(s[i%table_mod], s[i%table_mod], len) == 0)) {
-      printf("Error: %s %s\n", s[i%table_mod], s[i%table_mod]);
-    }
-    // best case; string that doesn't match
-    int result = ucstrncasecmp(s[i%table_mod], s[(i+1)%table_mod], len);
-    if (!no_check_not_match && result == 0) {
-      const char* a = s[i%table_mod];
-      const char* b = s[(i+1)%table_mod];
-      printf("Error: %s %s\n", a, b);
-    }
-  }
-  gettimeofday(&stop, NULL);
-  printf("ucstrcasecmp Time : %lums\n", (stop.tv_usec - start.tv_usec) / 1000 + (stop.tv_sec - start.tv_sec) * 1000);
-
-  gettimeofday(&start, NULL);
-  for (size_t i = 0; i < iters; i++) {
-    // worst case; string that matches
-    int thing = strncasecmp(s[i%table_mod], s[i%table_mod], len);
-    if (thing != 0) {
-      printf("Error: %s %s\n", s[i%table_mod], s[i%table_mod]);
-    }
-    // best case; string that doesn't match
-    thing = strncasecmp(s[i%table_mod], s[(i+1)%table_mod], len);
-    if (!no_check_not_match && thing == 0) {
-      printf("Error: %s %s\n", s[i%table_mod], s[(i+1)%table_mod]);
-    }
-  }
-  gettimeofday(&stop, NULL);
-  printf("strcasecmp time : %lums\n", (stop.tv_usec - start.tv_usec) / 1000 + (stop.tv_sec - start.tv_sec) * 1000);
-
-}
 void generateRandomMatchingStrings(const char **s, int tableLen, int strLen){
   std::vector<foldPair> foldPairs;
   for (int i = 0; i < 8192; i ++){
-    if (_CaseFolds[i].From != 0){
-      foldPairs.push_back(_CaseFolds[i]);
+    auto cf = getCaseFold(i);
+    if (cf.From != 0){
+      foldPairs.push_back(cf);
     }
   }
 
@@ -452,7 +402,7 @@ void generateRandomMatchingStrings2(const char **s, int tableLen, int strLen){
       int idx = rand() % FOLDMAPSIZE;
       while(!pair || !pair[0] || !pair[1]) {
        idx = rand() % FOLDMAPSIZE;
-       pair = _FoldMap[idx];
+       pair = getFoldMap(idx);
       }
       uint16_t upper = 0;
       uint16_t lower = 0;
@@ -494,30 +444,16 @@ void generateRandomMatchingStrings2(const char **s, int tableLen, int strLen){
   }
 
 }
-
+static const char* s[TABLE_SIZE];
 int main() {
 //  test_icu();
   // return 0;
-  const char * cyrillic1 = "ƂⰩⅯƂⰨⅮƁⰧⅭɃⰦⅬSⰥⅫŽⰤⅪŽⰣⅩŻⰢⅨŻⰡⅧŹⰠⅦŹⰟⅥŸⰞⅤŶⰝⅣŶⰜⅢŴⰛⅡŴⰚⅠŲⰙⅯŲⰘⅮŰⰗⅭŰⰖⅬŮⰕⅫŮⰔⅪŬⰓⅩŬⰒⅨŪⰑⅧŪⰐⅦŨⰏⅥŨⰎⅤŦⰍⅣŦⰌⅢŤⰋⅡŤⰊⅠŢⰉ";
-  // the above, but with a different case
-  const char * cyrillic2 = "ƃⱙⅿƃⱘⅾɓⱗⅽƀⱖⅼſⱕⅻžⱔⅺžⱓⅹżⱒⅸżⱑⅷźⱐⅶźⱏⅵÿⱎⅴŷⱍⅳŷⱌⅲŵⱋⅱŵⱊⅰųⱉⅿųⱈⅾűⱇⅽűⱆⅼůⱅⅻůⱄⅺŭⱃⅹŭⱂⅸūⱁⅷūⱀⅶũⰿⅵũⰾⅴŧⰽⅳŧⰼⅲťⰻⅱťⰺⅰţⰹ";
   
 
 
-  // get the current time
-  struct timeval stop, start;
-  gettimeofday(&start, NULL);
-  // seed the random number generator
-  srand(start.tv_usec);
 
   // generate a random utf-8 string
-  const char* s[TABLE_SIZE];
 
-
-  // s[0] = "ŘŮŠŤĚĎ";
-  // s[1] = "řůšťěď";
-  // s[2] = cyrillic1;
-  // s[3] = cyrillic2;
 	 generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	 printf("**** Generated Matching UTF-8 strings *****\n");
 	 run_tests(s, true, TABLE_SIZE);

@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "constants.h"
+#include "data.h"
 // clang-format off
 
 // _CaseFolds stores all Unicode simple case-folds.
@@ -7489,3 +7489,16 @@ const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower [256] = {
 	};
 
 // clang-format on
+
+
+foldPair getCaseFold(i){
+	if (i < 0 || i > sizeof(_CaseFolds) / sizeof(_CaseFolds[0]))
+		return (foldPair){0, 0};
+	return (foldPair){_CaseFolds[i].From, _CaseFolds[i].To};
+}
+
+uint16_t * getFoldMap(int i){
+	if (i < 0 || i > sizeof(_FoldMap) / sizeof(_FoldMap[0]))
+		return 0;
+	return _FoldMap[i];
+}

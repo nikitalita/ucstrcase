@@ -133,21 +133,36 @@ if (GENERATE_DATA)
 endif()
 
 if(BUILD_TESTS)
-  #find ICU4C using pkgconfig
   if(VCPKG_TARGET_TRIPLET)
+    # clear these out every time or else it won't work when variants change
+    set(ICU_LDFLAGS "")
+    set(ICU_CFLAGS "")
+    set(ICU_LIBRARIES "")
+    set(ICU_INCLUDE_DIRS "")
+    set(ICU_LDFLAGS_OTHER "")
+    set(ICU_CFLAGS_OTHER "")
+    set(ICU_FOUND FALSE)  
     # check to see if we have the "test" feature in vcpkg
     if(NOT VCPKG_MANIFEST_FEATURES MATCHES "test")
       message(FATAL_ERROR "VCPKG does not have the test feature")
     endif()
-    #set it to the current build directory/vcpkg_installed/current_triplet/lib/pkgconfig
     message(STATUS "VCPKG_TARGET_TRIPLET: ${VCPKG_TARGET_TRIPLET}")
     message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
-    set(VCPKG_PC_PATH "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
-    # set the PKG_CONFIG_PATH environment variable to the vcpkg_installed directory
-    set(ENV{PKG_CONFIG_PATH} "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
-    message(STATUS "PKG_CONFIG_PATH: $ENV{PKG_CONFIG_PATH}")
 
-
+    # pkg-config is a f*cking abomination.
+    # check to see if Target triplet includes "windows"
+    if(VCPKG_TARGET_TRIPLET MATCHES "windows")
+      # check if it's using static-md
+      if(NOT VCPKG_TARGET_TRIPLET MATCHES "-static-md")
+        message(FATAL_ERROR "\n**************************\nUse the x{32,64}-windows-static-md triplet!\n**************************\n")
+      endif()
+    else()
+      #set it to the current build directory/vcpkg_installed/current_triplet/lib/pkgconfig
+      set(VCPKG_PC_PATH "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
+      # set the PKG_CONFIG_PATH environment variable to the vcpkg_installed directory
+      set(ENV{PKG_CONFIG_PATH} "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
+      message(STATUS "PKG_CONFIG_PATH: $ENV{PKG_CONFIG_PATH}")
+    endif()
   endif()
 
   find_package(PkgConfig REQUIRED)
@@ -169,10 +184,12 @@ if(BUILD_TESTS)
   #ensure that gentables is built before the tests
 
   add_executable(utf8_bench test/bench.cpp)
-  add_dependencies(utf8_bench ucstrcase)
-  add_sanitizer(utf8_bench)
+  # add_dependencies(utf8_bench ucstrcase)
+  # add_sanitizer(utf8_bench)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD 23)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD_REQUIRED ON)
+  # project include directory
+  target_include_directories(utf8_bench PRIVATE include src)
 
   target_compile_options(utf8_bench PRIVATE ${ICU_CFLAGS})
   # check if strcasecmp is available
@@ -181,10 +198,28 @@ if(BUILD_TESTS)
   #if not, we have to define strcasecmp as 
   if(NOT HAVE_STRCASECMP)
     target_compile_definitions(utf8_bench PRIVATE -Dstrcasecmp=stricmp)
+    target_compile_definitions(utf8_bench PRIVATE -Dstrncasecmp=strnicmp)
+  endif()
+  
+  # target_link_libraries(utf8_bench ${PROJECT_NAME})
+  # check if we're using msvc
+  if (MSVC)
+    #find the -L option in the ICU_LDFLAGS
+    string(FIND "${ICU_LDFLAGS}" "-L" ICU_LDFLAGS_POS)
+    # get the substring from -L to the end of the string
+    string(SUBSTRING "${ICU_LDFLAGS}" "${ICU_LDFLAGS_POS}" -1 ICU_LDFLAGS)
+    # find the semicolon after
+    string(FIND "${ICU_LDFLAGS}" ";" ICU_LDFLAGS_POS)
+    # get the substring from 0 to the semicolon
+    string(SUBSTRING "${ICU_LDFLAGS}" 0 "${ICU_LDFLAGS_POS}" ICU_LDFLAGS)
+    # replace -L with /LIBPATH:
+    string(REPLACE "-L" "/LIBPATH:" ICU_LDFLAGS ${ICU_LDFLAGS})
+    target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
+  else()
+    target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
   endif()
   target_link_libraries(utf8_bench ${ICU_LIBRARIES})
   target_link_libraries(utf8_bench ${PROJECT_NAME})
-  target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
 
   # print out the compile options, the linked libraries, and the linked options
   get_target_property(utf8_bench_COMPILE_OPTIONS utf8_bench COMPILE_OPTIONS)

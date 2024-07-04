@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "constants.h"
+#include "data.h"
 #include "ucstrcase.h"
 
 // UnicodeVersion is the Unicode version from which the tables in this file are
