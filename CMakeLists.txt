@@ -175,6 +175,13 @@ if(BUILD_TESTS)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD_REQUIRED ON)
 
   target_compile_options(utf8_bench PRIVATE ${ICU_CFLAGS})
+  # check if strcasecmp is available
+  include( CheckFunctionExists )
+  CHECK_FUNCTION_EXISTS(strcasecmp HAVE_STRCASECMP)
+  #if not, we have to define strcasecmp as 
+  if(NOT HAVE_STRCASECMP)
+    target_compile_definitions(utf8_bench PRIVATE -Dstrcasecmp=stricmp)
+  endif()
   target_link_libraries(utf8_bench ${ICU_LIBRARIES})
   target_link_libraries(utf8_bench ${PROJECT_NAME})
   target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})

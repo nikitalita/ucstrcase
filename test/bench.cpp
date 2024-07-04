@@ -9,6 +9,10 @@
 #include <vector>
 #define U_SHOW_CPLUSPLUS_API 1
 #include <unicode/unistr.h>
+#include <unicode/uchar.h>
+
+#include "constants.h"
+
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 2 // 2-percent chance of generating a UTF-8 character
 #define utf8_invalid_probability 20 // 1-percent chance of generating an invalid UTF-8 character
@@ -17,7 +21,7 @@
 #define STRING_SIZE 30
 #define locb 0x80
 #define hicb 0xBF
-#include "constants.h"
+
 extern const foldPair _CaseFolds[];
 extern const uint16_t _FoldMap[][4];
 
@@ -433,7 +437,6 @@ void generateRandomMatchingStrings(const char **s, int tableLen, int strLen){
 
 }
 
-#include <unicode/uchar.h>
 void generateRandomMatchingStrings2(const char **s, int tableLen, int strLen){
   auto FOLDMAPSIZE = (uint16_t) 256;
   auto FOLDMAPITEMLEN = (uint16_t) 4;
