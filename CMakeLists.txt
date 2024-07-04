@@ -183,7 +183,7 @@ if(BUILD_TESTS)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD 23)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD_REQUIRED ON)
   # project include directory
-  target_include_directories(utf8_bench PRIVATE include src)
+  target_include_directories(utf8_bench PRIVATE include src test)
 
   target_compile_options(utf8_bench PRIVATE ${ICU_CFLAGS})
   # check if strcasecmp is available

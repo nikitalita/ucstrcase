@@ -9,6 +9,8 @@
 #define U_SHOW_CPLUSPLUS_API 1
 #include <unicode/unistr.h>
 #include <unicode/uchar.h>
+#include <utf8.h>
+
 #include "data.h"
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 2 // 2-percent chance of generating a UTF-8 character
@@ -221,6 +223,8 @@ enum testType{
   STRNCASECMP,
   ICU_CASE_CMP,
   ICU_CASE_CMP_N,
+  UTF8CASECMP,
+  UTF8NCASECMP,
   MAX
 };
 
@@ -231,6 +235,8 @@ const std::string funcNames[testType::MAX]= {
   {"strncasecmp"},
   {"icu::UnicodeString::caseCompare"},
   {"icu::UnicodeString::caseCompareBetween"},
+  {"utf8casecmp"},
+  {"utf8ncasecmp"}
 };
 
 
@@ -262,6 +268,13 @@ int run_test(testType type, const char* a, const char* b,  int64_t len = -1, boo
     case UCSTRCASECMP_N:
       result = ucstrncasecmp(a, b, len);
       break;
+    case UTF8CASECMP:
+      result = utf8casecmp((char8_t*)a, (char8_t*)b);
+      break;
+    case UTF8NCASECMP:
+      result = utf8ncasecmp((char8_t*)a, (char8_t*)b, len);
+      break;
+
     default:
       throw std::runtime_error("Invalid test type");
   }
@@ -284,7 +297,7 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
 
 	// if string_length == 0, do the non-ntypes (even indexes)
 	if (filters.empty())
-		filters = {UCSTRCASECMP, UCSTRCASECMP_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N};
+		filters = {UCSTRCASECMP, UCSTRCASECMP_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N, UTF8CASECMP, UTF8NCASECMP};
   for (int i = 0; i < filters.size(); i++){
     testType type = (testType)filters[i];
     if (string_length != 0 && (!isNType(type))){
