@@ -1,0 +1,8 @@
+# ucstrcase cmake project-config input for CMakeLists.txt script
+# this is a cmake.in that gets processed by cmake to generate a cmake file for the install target
+
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/@UCSTRCASE_TARGETS_EXPORT_NAME@.cmake")
+check_required_components("@UCSTRCASE_TARGET_NAME@")

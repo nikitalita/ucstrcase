@@ -1,0 +1,11 @@
+prefix=/Users/nikita/Workspace/blurgh/install
+exec_prefix=/Users/nikita/Workspace/blurgh/install
+libdir=/Users/nikita/Workspace/blurgh/install/lib
+includedir=/Users/nikita/Workspace/blurgh/install/include/ucstrcase
+
+Name: 
+Description: 
+Version: 
+Libs: -L${libdir} -l
+Cflags: -I${includedir}
+
