@@ -732,7 +732,7 @@ func genCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	fmt.Fprint(hw, "\n")
 
 	fmt.Fprintln(w, "// _CaseFolds stores all Unicode simple case-folds.")
-	fmt.Fprintf(w, "foldPair _CaseFolds[%d] = {\n", caseFoldSize)
+	fmt.Fprintf(w, "const foldPair _CaseFolds[%d] = {\n", caseFoldSize)
 	// in the range of 0..caseFoldSize-1, NOT hashes
 	var last_line_had_hashes bool = false
 	for i := 0; i < caseFoldSize-1; i++ {
@@ -830,7 +830,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 
 	fmt.Fprintln(w, "// _FoldMap stores the Unicode case-folds for characters "+
 		"that have two or more folds.")
-	fmt.Fprintf(w, "static uint16_t _FoldMap[%d][4] = {\n", foldMapSize)
+	fmt.Fprintf(w, "const uint16_t _FoldMap[%d][4] = {\n", foldMapSize)
 	// for _, ff := range folds {
 	var last_line_had_hashes bool = false
 	for i := 0; i < foldMapSize-1; i++ {
@@ -909,7 +909,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	fmt.Fprintln(hw, "")
 
 	fmt.Fprintln(w, foldMapExcludingUpperLowerComment)
-	fmt.Fprintf(w, "_FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower [%d] = {\n", foldMapSize)
+	fmt.Fprintf(w, "const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower [%d] = {\n", foldMapSize)
 	// for _, c := range noUpperLower {
 	for i := 0; i < foldMapSize-1; i++ {
 		// check if i is in noUpperLower
@@ -1001,7 +1001,7 @@ func genUpperLowerTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) 
 	fmt.Fprint(hw, "\n")
 
 	fmt.Fprintln(w, strings.TrimSpace(docComment))
-	fmt.Fprintf(w, "uint32_t _UpperLower[%d][2] = {\n", upperLowerTableSize)
+	fmt.Fprintf(w, "const uint32_t _UpperLower[%d][2] = {\n", upperLowerTableSize)
 	// for _, c := range cases {
 	var last_line_had_hashes bool = false
 	for i := 0; i < upperLowerTableSize-1; i++ {
@@ -1086,19 +1086,19 @@ typedef struct {
 
 func writeDataSuffix(w *bytes.Buffer) {
 	const s = `
-	// clang-format on
-	foldPair getCaseFold(i){
-		if (i < 0 || i > sizeof(_CaseFolds) / sizeof(_CaseFolds[0]))
-			return (foldPair){0, 0};
-		return (foldPair){_CaseFolds[i].From, _CaseFolds[i].To};
-	}
-	
-	uint16_t * getFoldMap(int i){
-		if (i < 0 || i > sizeof(_FoldMap) / sizeof(_FoldMap[0]))
-			return 0;
-		return _FoldMap[i];
-	}
-`	
+// clang-format on
+foldPair getCaseFold(i){
+	if (i < 0 || i > sizeof(_CaseFolds) / sizeof(_CaseFolds[0]))
+		return (foldPair){0, 0};
+	return (foldPair){_CaseFolds[i].From, _CaseFolds[i].To};
+}
+
+const uint16_t * getFoldMap(int i){
+	if (i < 0 || i > sizeof(_FoldMap) / sizeof(_FoldMap[0]))
+		return 0;
+	return _FoldMap[i];
+}
+`
 	w.WriteString(s)
 }
 
@@ -1113,7 +1113,7 @@ extern "C" {
 #endif
 
 foldPair getCaseFold(int i);
-uint16_t * getFoldMap(int i);
+const uint16_t * getFoldMap(int i);
 
 #ifdef __cplusplus
 }
@@ -1308,7 +1308,7 @@ func loadTableInfo(root, tablesFile string) {
 func updateTableInfoFile(root, tablesFile, fileHash, foldHash string) {
 	// get the relative path of tablesFile to root
 	file, err := filepath.Rel(root, tablesFile)
-
+	base := filepath.Base(file)
 	tableInfo.Filename = file
 	tableInfo.UnicodeVersion = gen.UnicodeVersion()
 	tableInfo.CLDRVersion = gen.CLDRVersion()
@@ -1319,7 +1319,7 @@ func updateTableInfoFile(root, tablesFile, fileHash, foldHash string) {
 	if err != nil && !os.IsNotExist(err) {
 		log.Panic(err)
 	}
-	m[file] = tableInfo
+	m[base] = tableInfo
 
 	data, err := json.MarshalIndent(m, "", "    ")
 	if err != nil {
@@ -1911,7 +1911,7 @@ func realMain() int {
 			"    case_fold_hash:  %q\n"+
 			"    gen_go_hash:     %q\n",
 			tableInfo.UnicodeVersion, tableInfo.CLDRVersion,
-			chop(tableInfo.CaseFoldHash, 8), chop(tableInfo.GenGoHash, 8))
+			tableInfo.CaseFoldHash, tableInfo.GenGoHash)
 		return 0
 	}
 
@@ -1954,8 +1954,8 @@ func realMain() int {
 		"    gen_go_hash:     %s => %s\n\n",
 		colorize(tableInfo.UnicodeVersion, gen.UnicodeVersion(),
 			tableInfo.CLDRVersion, gen.CLDRVersion(),
-			chop(tableInfo.CaseFoldHash, 8), chop(foldHash, 8),
-			chop(tableInfo.GenGoHash, 8), chop(fileHash, 8))...)
+			chop(tableInfo.CaseFoldHash, 8), foldHash,
+			chop(tableInfo.GenGoHash, 8), fileHash)...)
 	if *dryRun {
 		log.Printf("%s gen: would change %s "+
 			"(remove -dry-run flag to update the generated files)\n",
@@ -1976,12 +1976,13 @@ func realMain() int {
 		var hw bytes.Buffer
 
 		writeHeaderPrefix(&hw)
-		w.WriteString("#include <stdint.h>\n")
 		w.WriteString("#include <stddef.h>\n")
+		w.WriteString("#include <stdint.h>\n\n")
 		w.WriteString("#include \"data.h\"\n")
-		w.WriteString("// clang-format off")
+		w.WriteString("\n// clang-format off\n\n")
 
 		gen.WriteUnicodeVersion(&hw)
+		gen.WriteCLDRVersion(&hw)
 
 		genCaseFolds(&w, &hw, *firstValidHash)
 		genUpperLowerTable(&w, &hw, *firstValidHash)
@@ -2021,7 +2022,7 @@ func realMain() int {
 		"    case_fold_hash:  %q\n"+
 		"    gen_go_hash:     %q\n",
 		tableInfo.UnicodeVersion, tableInfo.CLDRVersion,
-		chop(tableInfo.CaseFoldHash, 8), chop(tableInfo.GenGoHash, 8))
+		tableInfo.CaseFoldHash, tableInfo.GenGoHash)
 
 	// Exit 1 if we only update the hash of the generate files since this
 	// is a development only flag.

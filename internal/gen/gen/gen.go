@@ -249,15 +249,13 @@ func get(root, path string) io.ReadCloser {
 // WriteUnicodeVersion writes a constant for the Unicode version from which the
 // tables are generated.
 func WriteUnicodeVersion(w io.Writer) {
-	fmt.Fprintf(w, "// UnicodeVersion is the Unicode version from which the tables in this file are derived.\n")
-	fmt.Fprintf(w, "static const char * utf8_UnicodeVersion = %q;\n\n", UnicodeVersion())
+	fmt.Fprintf(w, "// Built from Unicode version %q.\n", UnicodeVersion())
 }
 
 // WriteCLDRVersion writes a constant for the CLDR version from which the
 // tables are generated.
 func WriteCLDRVersion(w io.Writer) {
-	fmt.Fprintf(w, "// CLDRVersion is the CLDR version from which the tables in this package are derived.\n")
-	fmt.Fprintf(w, "const CLDRVersion = %q\n\n", CLDRVersion())
+	fmt.Fprintf(w, "// Built from CLDR version %q.\n", CLDRVersion())
 }
 
 // WriteGoFile prepends a standard file comment and package statement to the
