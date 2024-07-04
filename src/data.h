@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 foldPair getCaseFold(int i);
-uint16_t * getFoldMap(int i);
+const uint16_t * getFoldMap(int i);
 
 #ifdef __cplusplus
 }
