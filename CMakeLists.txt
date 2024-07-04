@@ -144,7 +144,7 @@ if(BUILD_TESTS)
     set(ICU_FOUND FALSE)  
     # check to see if we have the "test" feature in vcpkg
     if(NOT VCPKG_MANIFEST_FEATURES MATCHES "test")
-      message(FATAL_ERROR "VCPKG does not have the test feature")
+      message(FATAL_ERROR "Specify \"test\" in VCPKG_MANIFEST_FEATURES to build the tests!")
     endif()
     message(STATUS "VCPKG_TARGET_TRIPLET: ${VCPKG_TARGET_TRIPLET}")
     message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
@@ -156,12 +156,6 @@ if(BUILD_TESTS)
       if(NOT VCPKG_TARGET_TRIPLET MATCHES "-static-md")
         message(FATAL_ERROR "\n**************************\nUse the x{32,64}-windows-static-md triplet!\n**************************\n")
       endif()
-    else()
-      #set it to the current build directory/vcpkg_installed/current_triplet/lib/pkgconfig
-      set(VCPKG_PC_PATH "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
-      # set the PKG_CONFIG_PATH environment variable to the vcpkg_installed directory
-      set(ENV{PKG_CONFIG_PATH} "${CMAKE_CURRENT_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
-      message(STATUS "PKG_CONFIG_PATH: $ENV{PKG_CONFIG_PATH}")
     endif()
   endif()
 

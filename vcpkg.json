@@ -18,7 +18,7 @@
             "description": "Enable tests",
             "dependencies": [
                 {"name": "icu"},
-                {"name": "pkgconf", "platform": "windows"}
+                {"name": "pkgconf"}
             ]
         }
     }
