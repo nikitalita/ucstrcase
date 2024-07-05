@@ -10,21 +10,52 @@
 #include <unicode/unistr.h>
 #include <unicode/uchar.h>
 #include <utf8.h>
+#include <thirdparty/utf8proc.h>
 
 #include "data.h"
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 2 // 2-percent chance of generating a UTF-8 character
 #define utf8_invalid_probability 20 // 1-percent chance of generating an invalid UTF-8 character
 #define TABLE_SIZE 1000000
-#define TABLE_TRAVERSALS 10
+#define TABLE_TRAVERSALS 1
 #define STRING_SIZE 30
 #define locb 0x80
 #define hicb 0xBF
+
+#include <chrono>
+
+int64_t getCurrentMillis()
+{
+    using std::chrono::system_clock;
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+
+    // Convert duration to milliseconds
+    auto milliseconds
+        = std::chrono::duration_cast<std::chrono::milliseconds>(
+              duration)
+              .count();
+    
+    return milliseconds;
+}
+
+
 
 typedef struct {
     unsigned char lo; // lowest value for second byte.
     unsigned char hi; // highest value for second byte.
 } acceptRange;
+
+#define u_xx 0xF1 // invalid: size 1
+#define u_as 0xF0 // ASCII: size 1
+#define u_s1 0x02 // accept 0, size 2
+#define u_s2 0x13 // accept 1, size 3
+#define u_s3 0x03 // accept 0, size 3
+#define u_s4 0x23 // accept 2, size 3
+#define u_s5 0x34 // accept 3, size 4
+#define u_s6 0x04 // accept 0, size 4
+#define u_s7 0x44 // accept 4, size 4
+
 
 acceptRange bacceptRanges[16]{
     {locb, hicb}, // 0 (ASCII)
@@ -45,15 +76,6 @@ acceptRange bacceptRanges[16]{
     {0,0},
 
 };
-#define u_xx 0xF1 // invalid: size 1
-#define u_as 0xF0 // ASCII: size 1
-#define u_s1 0x02 // accept 0, size 2
-#define u_s2 0x13 // accept 1, size 3
-#define u_s3 0x03 // accept 0, size 3
-#define u_s4 0x23 // accept 2, size 3
-#define u_s5 0x34 // accept 3, size 4
-#define u_s6 0x04 // accept 0, size 4
-#define u_s7 0x44 // accept 4, size 4
 
 static const uint8_t first[256] = {
 	//   1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
@@ -75,25 +97,10 @@ static const uint8_t first[256] = {
 	u_s2,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s3,u_s4,u_s3,u_s3, // 0xE0-0xEF
 	u_s5,u_s6,u_s6,u_s6,u_s7,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx,u_xx, // 0xF0-0xFF
 };
-#include <chrono>
-
-int64_t getCurrentMillis()
-{
-    using std::chrono::system_clock;
-    auto now = std::chrono::system_clock::now();
-    auto duration = now.time_since_epoch();
-
-    // Convert duration to milliseconds
-    auto milliseconds
-        = std::chrono::duration_cast<std::chrono::milliseconds>(
-              duration)
-              .count();
-    
-    return milliseconds;
-}
 acceptRange getAcceptRange(uint8_t firstByte) {
-    return bacceptRanges[first[firstByte]];
+    return bacceptRanges[first[firstByte] >> 4];
 }
+
 
 char* generate_random_utf8_string(int length) {
     if (length <= 0) return NULL;
@@ -105,22 +112,19 @@ char* generate_random_utf8_string(int length) {
     for (int i = 0; i < length; ++i) {
         int rnd = rand() % 100; // Determine the length of the next character (1 to 4 bytes)
         if (rnd < 100 - utf8_char_probability || i +3  >= length) { // 1-byte character
-            str[i] = (char)((rand() % 0x7F) + 1); // 0x01-0x7F
+            str[i] = (char)((rand() % 0x5E) + 20); // 0x20-0x7E
         } else{
           // now randomly generate a 2, 3, or 4 byte character
           rnd = rand() % 3 + 2;
           uint8_t firstByteHi = 0;
           uint8_t firstByteLo = 0;
            if (rnd == 2) { // 2-byte character
-              if (i + 1 >= length) break; // Ensure there's room for 2 bytes
               firstByteHi = 0xC2;
               firstByteLo = 0xDF;
           } else if (rnd == 3) { // 3-byte character
-              if (i + 2 >= length) break; // Ensure there's room for 3 bytes
               firstByteHi = 0xE0;
               firstByteLo = 0xEF;
           } else { // 4-byte character
-              if (i + 3 >= length) break; // Ensure there's room for 4 bytes
               firstByteHi = 0xF0;
               firstByteLo = 0xF4;
           }
@@ -216,6 +220,51 @@ char* generate_random_garbage(int length) {
   return str;
 }
 
+char *tolower_normalize(const char *str) 
+{
+	utf8proc_uint8_t *retval;
+	auto result = utf8proc_map((const uint8_t*)str, 0, &retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD));
+  if (result < 0){
+    return NULL;
+  }
+	return (char*)retval;
+}
+
+int utf8proc_casecmp(const char *a, const char *b){
+  auto a_lower = tolower_normalize(a);
+  auto b_lower = tolower_normalize(b);
+  if (a_lower == NULL && b_lower == NULL){
+    return 0;
+  }
+  if (a_lower == NULL || b_lower == NULL){
+    return 1 ? a_lower == NULL : b_lower == NULL;
+  }
+  auto result = strcmp(a_lower, b_lower);
+  if (a_lower)
+  free(a_lower);
+  if (b_lower)
+  free(b_lower);
+  return result;
+}
+
+int utf8proc_casecmp_n(const char *a, const char *b, size_t len){
+  auto a_lower = tolower_normalize(a);
+  auto b_lower = tolower_normalize(b);
+  if (a_lower == NULL && b_lower == NULL){
+    return 0;
+  }
+  if (a_lower == NULL || b_lower == NULL){
+    return 1 ? a_lower == NULL : b_lower == NULL;
+  }
+
+  auto result = strncmp(a_lower, b_lower, len);
+  if (a_lower)
+  free(a_lower);
+  if (b_lower)
+  free(b_lower);
+  return result;
+}
+
 enum testType{
 	UCSTRCASECMP = 0,
 	UCSTRCASECMP_N,
@@ -225,6 +274,8 @@ enum testType{
   ICU_CASE_CMP_N,
   UTF8CASECMP,
   UTF8NCASECMP,
+  UTF8PROC_CASECMP,
+  UTF8PROC_CASECMP_N,
   MAX
 };
 
@@ -236,8 +287,20 @@ const std::string funcNames[testType::MAX]= {
   {"icu::UnicodeString::caseCompare"},
   {"icu::UnicodeString::caseCompareBetween"},
   {"utf8casecmp"},
-  {"utf8ncasecmp"}
+  {"utf8ncasecmp"},
+  {"utf8proc_casecmp"},
+  {"utf8proc_casecmp_n"}
 };
+
+constexpr const char composed_upper_c_cedilla_num[] = {(char)0xC3, (char)0x87, 0x00};
+constexpr const char decomposed_upper_c_cedilla_num[] = {0x43, (char)0xCC, (char)0xA7, 0};
+constexpr const char* composed_upper_c_cedilla = composed_upper_c_cedilla_num;
+constexpr const char* decomposed_upper_c_cedilla = decomposed_upper_c_cedilla_num;
+constexpr const char composed_lower_c_cedilla_num[] = {(char)0xC3, (char)0xA7, 0x00};
+constexpr const char decomposed_lower_c_cedilla_num[] = {0x63,(char) 0xCC, (char)0xA7, 0};
+constexpr const char* composed_lower_c_cedilla = composed_lower_c_cedilla_num;
+constexpr const char* decomposed_lower_c_cedilla = decomposed_lower_c_cedilla_num;
+
 
 
 int run_test(testType type, const char* a, const char* b,  int64_t len = -1, bool zero_is_matching = true) {
@@ -274,6 +337,12 @@ int run_test(testType type, const char* a, const char* b,  int64_t len = -1, boo
     case UTF8NCASECMP:
       result = utf8ncasecmp((char8_t*)a, (char8_t*)b, len);
       break;
+    case UTF8PROC_CASECMP:
+      result = utf8proc_casecmp(a, b);
+      break;
+    case UTF8PROC_CASECMP_N:
+      result = utf8proc_casecmp_n(a, b, len);
+      break;
 
     default:
       throw std::runtime_error("Invalid test type");
@@ -297,7 +366,7 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
 
 	// if string_length == 0, do the non-ntypes (even indexes)
 	if (filters.empty())
-		filters = {UCSTRCASECMP, UCSTRCASECMP_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N, UTF8CASECMP, UTF8NCASECMP};
+		filters = {UCSTRCASECMP, UCSTRCASECMP_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N, UTF8CASECMP, UTF8NCASECMP, UTF8PROC_CASECMP, UTF8PROC_CASECMP_N};
   for (int i = 0; i < filters.size(); i++){
     testType type = (testType)filters[i];
     if (string_length != 0 && (!isNType(type))){
@@ -341,17 +410,37 @@ void test_icu(){
   auto b_rune = DecodeRuneInString(btest, strlen(btest));
 
 
-  const char * test1 = "Ḩ";
-  const char * test2 = "ḩ";
+  const char * test1 = composed_upper_c_cedilla;
+  const char * test2 = decomposed_lower_c_cedilla;
   const char * cyrillic1 = "ƂⰩⅯƂⰨⅮƁⰧⅭɃⰦⅬSⰥⅫŽⰤⅪŽⰣⅩŻⰢⅨŻⰡⅧŹⰠⅦŹⰟⅥŸⰞⅤŶⰝⅣŶⰜⅢŴⰛⅡŴⰚⅠŲⰙⅯŲⰘⅮŰⰗⅭŰⰖⅬŮⰕⅫŮⰔⅪŬⰓⅩŬⰒⅨŪⰑⅧŪⰐⅦŨⰏⅥŨⰎⅤŦⰍⅣŦⰌⅢŤⰋⅡŤⰊⅠŢⰉ";
   // the above, but with a different case
   const char * cyrillic2 = "ƃⱙⅿƃⱘⅾɓⱗⅽƀⱖⅼſⱕⅻžⱔⅺžⱓⅹżⱒⅸżⱑⅷźⱐⅶźⱏⅵÿⱎⅴŷⱍⅳŷⱌⅲŵⱋⅱŵⱊⅰųⱉⅿųⱈⅾűⱇⅽűⱆⅼůⱅⅻůⱄⅺŭⱃⅹŭⱂⅸūⱁⅷūⱀⅶũⰿⅵũⰾⅴŧⰽⅳŧⰼⅲťⰻⅱťⰺⅰţⰹ";
 
-  icu::UnicodeString aicustr(cyrillic1);
-  icu::UnicodeString bicustr(cyrillic2);
+  icu::UnicodeString aicustr(test1);
+  icu::UnicodeString bicustr(test2);
+  aicustr.toLower();
+  bicustr.toLower();
   auto result = aicustr.caseCompare(bicustr, U_FOLD_CASE_DEFAULT);
   if (result != 0){
-    std::cout << "Error: icu::UnicodeString: no match for matching strings!!" << std::endl;
+    std::cout << "Error: icu::UnicodeString: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+  } else {
+    std::cout << "icu::UnicodeString: match for matching strings: " << test1 << " and " << test2 << std::endl;
+  }
+
+  // try utf8proc
+  auto result2 = utf8proc_casecmp(test1, test2);
+  if (result2 != 0){
+    std::cout << "Error: utf8proc_casecmp: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+  } else{
+    std::cout << "utf8proc_casecmp: match for matching strings: " << test1 << " and " << test2 << std::endl;
+  }
+
+  //try ucstrcase
+  auto result3 = ucstrcasecmp(test1, test2);
+  if (result3 != 0){
+    std::cout << "Error: ucstrncasecmp: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+  } else {
+    std::cout << "ucstrncasecmp: match for matching strings: " << test1 << " and " << test2 << std::endl;
   }
 }
 
@@ -459,13 +548,26 @@ void generateRandomMatchingStrings2(const char **s, int tableLen, int strLen){
 }
 static const char* s[TABLE_SIZE];
 int main() {
-//  test_icu();
+  //  test_icu();
+  //  return 0;
   // return 0;
   
 
 
 
   // generate a random utf-8 string
+   for (int i = 0; i < TABLE_SIZE; i++) {
+     s[i] = generate_random_ascii_string(STRING_SIZE);
+   }
+   printf("**** Generated ASCII strings *****\n");
+   run_tests(s);
+
+   for (int i = 0; i < TABLE_SIZE; i++) {
+     s[i] = generate_random_utf8_string(STRING_SIZE);
+   }
+   printf("**** Generated UTF-8 strings *****\n");
+   run_tests(s);
+
 
 	 generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	 printf("**** Generated Matching UTF-8 strings *****\n");
@@ -475,18 +577,6 @@ int main() {
   printf("**** Generated Tricky matching UTF-8 strings *****\n");
 //  run_tests(s, true, TABLE_SIZE, 0, false, { UCSTRCASECMP});
 	run_tests(s, true, TABLE_SIZE);
-
-   for (int i = 0; i < TABLE_SIZE; i++) {
-     s[i] = generate_random_utf8_string(STRING_SIZE);
-   }
-   printf("**** Generated UTF-8 strings *****\n");
-   run_tests(s);
-
-   for (int i = 0; i < TABLE_SIZE; i++) {
-     s[i] = generate_random_ascii_string(STRING_SIZE);
-   }
-   printf("**** Generated ASCII strings *****\n");
-   run_tests(s);
 
    for (int i = 0; i < TABLE_SIZE; i++) {
      s[i] = generate_random_invalid_utf8_string(STRING_SIZE);
