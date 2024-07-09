@@ -14,6 +14,7 @@ RuneResult DecodeRuneInString(const char *s, size_t length);
 int ucstrncasecmp(const char *s, const char *t, size_t len);
 int ucstrcasecmp(const char *s, const char *t);
 bool EqualFold(const char *s, const char *t);
+uint32_t caseFold(uint32_t c);
 #ifdef __cplusplus
 }
 #endif

@@ -271,7 +271,6 @@ int RuneLen(unsigned int r) {
 }
 
 // Function prototypes
-uint32_t caseFold(uint32_t r);
 uint16_t *foldMap(uint32_t r);
 int clamp(int n);
 int ucstrcasecmp(const char *s, const char *t);
@@ -345,6 +344,65 @@ int ucstrcasecmp(const char *s, const char *t) {
   return ucstrncasecmp(s, t, slen > tlen ? slen : tlen);
 }
 
+
+#define branchlessMIN(a, b) (b ^ ((a ^ b) & -(a < b)))
+
+/* 
+ * Decode the next character from BUF, returning a RuneResult structure.
+ * The size field will be set to the number of bytes read from the buffer.
+ * The rune field will be set to the decoded Unicode code point.
+ * If the input is invalid, the rune field will be set to RuneError.
+ *
+ * Since this is a branchless decoder, four bytes will be read from the
+ * buffer regardless of the actual length of the next character. This
+ * means the buffer _must_ have at least three bytes of zero padding
+ * following the end of the data stream.
+ */
+RuneResult
+_unsafe_utf8_decode(const char *buf, size_t _slen)
+{
+    static const char lengths[] = {
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+    };
+    static const int masks[]  = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
+    static const uint32_t mins[] = {4194304, 0, 128, 2048, 65536};
+    static const int shiftc[] = {0, 18, 12, 6, 0};
+    static const int shifte[] = {0, 6, 4, 2, 0};
+
+    const uint8_t *s = (const uint8_t *)buf;
+    int len = lengths[s[0] >> 3];
+    RuneResult result = (RuneResult){0, 0};
+    result.size = len + !len;
+
+
+    /* Assume a four-byte character and load four bytes. Unused bits are
+     * shifted out.
+     */
+    result.rune  = (uint32_t)(s[0] & masks[len]) << 18;
+    result.rune |= (uint32_t)(s[1] & 0x3f) << 12;
+    result.rune |= (uint32_t)(s[2] & 0x3f) <<  6;
+    result.rune |= (uint32_t)(s[3] & 0x3f) <<  0;
+    result.rune >>= shiftc[len];
+    
+    /* Accumulate the various error conditions. */
+    int e = (result.rune < mins[len]) << 6; // non-canonical encoding
+    e |= ((result.rune >> 11) == 0x1b) << 7;  // surrogate half?
+    e |= (result.rune > 0x10FFFF) << 8;  // out of range?
+    e |= (s[1] & 0xc0) >> 2;
+    e |= (s[2] & 0xc0) >> 4;
+    e |= (s[3]       ) >> 6;
+    e ^= 0x2a; // top two bits of each tail byte correct?
+    e >>= shifte[len];
+    e = (e != 0);
+    int mask = ((e != 0)) << 31 >> 31;
+    result.rune = (result.rune & ~mask) | (RuneError & mask);
+    return result;
+}
+
+
+// #define _UCSTRCASE_BAIL_IF_INVALID 1
+
 int ucstrncasecmp(const char *s, const char *t, size_t len) {
   int i = 0;
   int s_len = strnlen(s, len);
@@ -375,36 +433,53 @@ hasUnicode:
   t += i;
   s_len -= i;
   t_len -= i;
-  while (*s != '\0' && s_len >= 0 && t_len >= 0) {
+  while (*s != '\0' && s_len > 4 && t_len > 4) {
     if (*t == '\0') {
       return 1;
     }
 
-    int si, ti;
+    uint8_t si, ti;
     uint32_t sr, tr;
-    if ((unsigned char)*s < 0x80) {
-      sr = _lower[(unsigned char)*s & 0x7F];
-      si = 1;
-    } else {
-      RuneResult sr_result = DecodeRuneInString(s, s_len);
-      sr = caseFold(sr_result.rune);
-      si = sr_result.size;
+    RuneResult s_result = _unsafe_utf8_decode(s, s_len);
+    RuneResult t_result = _unsafe_utf8_decode(t, t_len);
+    sr = caseFold(s_result.rune);
+    s_len -= s_result.size;
+    s += s_result.size;
+
+    tr = caseFold(t_result.rune);
+    t_len -= t_result.size;
+    t += t_result.size;
+#ifdef _UCSTRCASE_BAIL_IF_INVALID
+    if (sr == RuneError || tr == RuneError) {
+      return clamp((int)sr - (int)tr);
     }
-    s += si;
-    s_len -= si;
-    if ((unsigned char)*t < 0x80) {
-      tr = _lower[(unsigned char)*t & 0x7F];
-      ti = 1;
-    } else {
-      RuneResult tr_result = DecodeRuneInString(t, t_len);
-      tr = caseFold(tr_result.rune);
-      ti = tr_result.size;
-    }
-    t += ti;
-    t_len -= ti;
+#endif
     // no size checking here because unicode upper and lower case characters can
     // have different lengths
-    if (sr == tr && sr != RuneError && tr != RuneError) {
+    if (sr == tr) {
+      continue;
+    }
+    return clamp((int)sr - (int)tr);
+  }
+  // do the rest with safe utf8 decode
+  // TODO: Don't copy all this code around
+  while (*s != '\0' && s_len > 0 && t_len > 0) {
+    if (*t == '\0') {
+      return 1;
+    }
+
+    uint8_t si, ti;
+    uint32_t sr, tr;
+    RuneResult s_rune = DecodeRuneInString((void*)s, s_len);
+    RuneResult t_rune = DecodeRuneInString((void*)t, t_len);
+    sr = caseFold(s_rune.rune);
+    s_len -= s_rune.size;
+    s += s_rune.size;
+
+    tr = caseFold(t_rune.rune);
+    t_len -= t_rune.size;
+    t += t_rune.size;
+    if (sr == tr) {
       continue;
     }
     return clamp((int)sr - (int)tr);
@@ -412,7 +487,7 @@ hasUnicode:
   if (*t == '\0') {
     return 0;
   }
-  return -1;
+  return clamp(s_len - t_len);
 }
 
 bool EqualFold(const char *s, const char *t) {
