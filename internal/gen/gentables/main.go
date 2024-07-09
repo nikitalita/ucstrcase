@@ -735,7 +735,7 @@ func genCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	fmt.Fprintf(w, "const foldPair _CaseFolds[%d] = {\n", caseFoldSize)
 	// in the range of 0..caseFoldSize-1, NOT hashes
 	var last_line_had_hashes bool = false
-	for i := 0; i < caseFoldSize-1; i++ {
+	for i := 0; i < caseFoldSize; i++ {
 		// check if i is in `hashes`
 		var h foldPair
 		for _, _h := range hashes {
@@ -759,7 +759,7 @@ func genCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 		fmt.Fprintf(w, "\n\t{0x%04X, 0x%04X}, // %d: %q => %q", p.From, p.To, h.From, p.From, p.To)
 		hashes = hashes[1:]
 	}
-	fmt.Fprint(w, "};\n\n")
+	fmt.Fprint(w, "\n};\n\n")
 }
 
 func dedupe(r []rune) []rune {
@@ -833,7 +833,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	fmt.Fprintf(w, "const uint16_t _FoldMap[%d][4] = {\n", foldMapSize)
 	// for _, ff := range folds {
 	var last_line_had_hashes bool = false
-	for i := 0; i < foldMapSize-1; i++ {
+	for i := 0; i < foldMapSize; i++ {
 		// check if i is in folds
 		var ff []rune
 		for _, _ff := range folds {
@@ -864,7 +864,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 		}
 		fmt.Fprintf(w, "}, // %d: %q", hash(uint32(ff[0]), seed, foldMapShift), ff)
 	}
-	fmt.Fprint(w, "};\n\n")
+	fmt.Fprint(w, "\n};\n\n")
 	last_line_had_hashes = false
 	type runeSet struct {
 		r uint32
@@ -911,7 +911,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	fmt.Fprintln(w, foldMapExcludingUpperLowerComment)
 	fmt.Fprintf(w, "const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower [%d] = {\n", foldMapSize)
 	// for _, c := range noUpperLower {
-	for i := 0; i < foldMapSize-1; i++ {
+	for i := 0; i < foldMapSize; i++ {
 		// check if i is in noUpperLower
 		var c runeSet = runeSet{}
 		for _, _c := range noUpperLower {
@@ -941,7 +941,7 @@ func genFoldTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 		fmt.Fprintf(w, "\n\t{0x%04X, {0x%04X, 0x%04X}}, // (%d) %q: [%q, %q]",
 			c.r, c.a[0], c.a[1], hash(c.r, seed, foldMapShift), c.r, c.a[0], c.a[1])
 	}
-	fmt.Fprint(w, "};\n\n")
+	fmt.Fprint(w, "\n};\n\n")
 }
 
 func genUpperLowerTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
@@ -1004,7 +1004,7 @@ func genUpperLowerTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) 
 	fmt.Fprintf(w, "const uint32_t _UpperLower[%d][2] = {\n", upperLowerTableSize)
 	// for _, c := range cases {
 	var last_line_had_hashes bool = false
-	for i := 0; i < upperLowerTableSize-1; i++ {
+	for i := 0; i < upperLowerTableSize; i++ {
 		// check if i is in cases
 		var c Case = Case{}
 
@@ -1029,7 +1029,7 @@ func genUpperLowerTable(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) 
 		fmt.Fprintf(w, "\n\t{0x%04X, 0x%04X}, // %d: %q => %q",
 			c.Upper, c.Lower, shiftHash(seed, uint32(c.Rune), upperLowerTableShift), c.Upper, c.Lower)
 	}
-	fmt.Fprint(w, "};\n")
+	fmt.Fprint(w, "\n};\n")
 
 	slices.SortFunc(special, func(c1, c2 Case) int {
 		return cmp.Compare(c1.Rune, c2.Rune)
@@ -1087,7 +1087,7 @@ typedef struct {
 func writeDataSuffix(w *bytes.Buffer) {
 	const s = `
 // clang-format on
-foldPair getCaseFold(i){
+foldPair getCaseFold(int i){
 	if (i < 0 || i > sizeof(_CaseFolds) / sizeof(_CaseFolds[0]))
 		return (foldPair){0, 0};
 	return (foldPair){_CaseFolds[i].From, _CaseFolds[i].To};
