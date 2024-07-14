@@ -18,7 +18,6 @@ typedef struct {
     std::u32string_view nfkd;
 } NormalizationTest;
 
-
 extern const NormalizationTest NORMALIZATION_PART_0_TESTS[25];
 extern const size_t NORMALIZATION_PART_0_TESTS_SIZE;
 extern const NormalizationTest NORMALIZATION_PART_1_TESTS[17029];

@@ -49,6 +49,7 @@ HEADER_CONTENTS = """
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "compose.h"
 typedef struct{
     uint32_t key;
     uint16_t value;
@@ -68,8 +69,7 @@ typedef struct {
 extern "C" {
 #endif
 uint32_t composition_table_astral(uint32_t ch, uint32_t c2);
-bool is_public_assigned(uint32_t c);
-
+const uint32_t stream_safe_leading_nonstarters(uint32_t c);
 #ifdef __cplusplus
 }
 #endif
@@ -519,52 +519,81 @@ def gen_decomposition_tables(canon_decomp, compat_decomp, cjk_compat_variants_de
         externs.append(gen_mph_data(name + '_decomposed', table, "DecomposedKV",
             lambda k: f"{{0x{k:05X}, {{0x{offsets[k]:03X}, 0x{len(table[k]):X}}}}}", 1))
     return "\n".join(externs)
-# def gen_qc_match(prop_table, out):
-#     out.write("    match c {\n")
+
+def flatten_prop_table(prop_table):
+    flat_table = {}
+    for low, high, data in prop_table:
+        if high:
+            for i in range(int(low, 16), int(high, 16) + 1):
+                flat_table[i] = data
+        else:
+            flat_table[int(low, 16)] = data
+    return flat_table
+
+def gen_qc_match(prop_table, out):
+    out.write("    switch (c) {\n")
+    # sort the prop table by "N", "M", then by the low codepoint
+    prop_table.sort(key=lambda x: (x[2], int(x[0], 16)))
+    # filter out the ones that are not "N" or "M"
+    prop_table_no = [x for x in prop_table if x[2] in ('N')]
+    prop_table_maybe = [x for x in prop_table if x[2] in ('M')]
+    flat_no = flatten_prop_table(prop_table_no)
+    for low, data in flat_no.items():
+
+        out.write(r"        case 0x%04X:" % low)
+        out.write("\n")
+    out.write("            return No;\n")
+    for low, data in flatten_prop_table(prop_table_maybe).items():
+        out.write(r"        case 0x%04X:" % low)
+        out.write("\n")
+    out.write("            return Maybe;\n")
+    out.write("        default: return Yes;\n")
+    out.write("    }\n")
 #
-#     for low, high, data in prop_table:
-#         assert data in ('N', 'M')
-#         result = "No" if data == 'N' else "Maybe"
-#         if high:
-#             out.write(r"        '\u{%s}'..='\u{%s}' => %s," % (low, high, result))
-#         else:
-#             out.write(r"        '\u{%s}' => %s," % (low, result))
-#         out.write("\n")
-#
-#     out.write("        _ => Yes,\n")
-#     out.write("    }\n")
-#
-# def gen_nfc_qc(prop_tables, out):
-#     out.write("\n#[inline]\n")
-#     out.write("#[allow(ellipsis_inclusive_range_patterns)]\n")
-#     out.write("pub fn qc_nfc(c: char) -> IsNormalized {\n")
-#     gen_qc_match(prop_tables['NFC_QC'], out)
-#     out.write("}\n")
-#
-# def gen_nfkc_qc(prop_tables, out):
-#     out.write("#[inline]\n")
-#     out.write("#[allow(ellipsis_inclusive_range_patterns)]\n")
-#     out.write("pub fn qc_nfkc(c: char) -> IsNormalized {\n")
-#     gen_qc_match(prop_tables['NFKC_QC'], out)
-#     out.write("}\n")
-#
-# def gen_nfd_qc(prop_tables, out):
-#     out.write("#[inline]\n")
-#     out.write("#[allow(ellipsis_inclusive_range_patterns)]\n")
-#     out.write("pub fn qc_nfd(c: char) -> IsNormalized {\n")
-#     gen_qc_match(prop_tables['NFD_QC'], out)
-#     out.write("}\n")
-#
-# def gen_nfkd_qc(prop_tables, out):
-#     out.write("#[inline]\n")
-#     out.write("#[allow(ellipsis_inclusive_range_patterns)]\n")
-#     out.write("pub fn qc_nfkd(c: char) -> IsNormalized {\n")
-#     gen_qc_match(prop_tables['NFKD_QC'], out)
-#     out.write("}\n")
+def gen_nfc_qc(prop_tables, out):
+    # out.write("IsNormalized qc_nfc(uint32_t c) {\n")
+    # gen_qc_match(prop_tables['NFC_QC'], out)
+    # out.write("}\n")
+    return gen_prop_table('NFC_QC', prop_tables['NFC_QC'], out)
+
+def gen_nfkc_qc(prop_tables, out):
+    # out.write("IsNormalized qc_nfkc(uint32_t c) {\n")
+    # gen_qc_match(prop_tables['NFKC_QC'], out)
+    # out.write("}\n")
+    return gen_prop_table('NFKC_QC', prop_tables['NFKC_QC'], out)
+
+
+def gen_nfd_qc(prop_tables, out):
+    # out.write("IsNormalized qc_nfd(uint32_t c) {\n")
+    # gen_qc_match(prop_tables['NFD_QC'], out)
+    # out.write("}\n")
+    return gen_prop_table('NFD_QC', prop_tables['NFD_QC'], out)
+
+def gen_nfkd_qc(prop_tables, out):
+    # out.write("IsNormalized qc_nfkd(uint32_t c) {\n")
+    # gen_qc_match(prop_tables['NFKD_QC'], out)
+    # out.write("}\n")
+    return gen_prop_table('NFKD_QC', prop_tables['NFKD_QC'], out)
 
 def gen_combining_mark(general_category_mark, out):
     return gen_mph_data('combining_mark', general_category_mark, 'uint32_t',
         lambda k: '0x{:05X}'.format(k), 10)
+
+
+def prop_table_val_to_int(val):
+    if val == 'Y':
+        return 0
+    if val == 'N':
+        return 1
+    if val == 'M':
+        return 2
+    raise ValueError("Unexpected value in prop table: %s" % val)
+
+def gen_prop_table(prop_table_name, prop_table, out):
+    flat = flatten_prop_table(prop_table)
+    return gen_mph_data(prop_table_name, flat, 'uint32_t',
+                        lambda k: f"0x{prop_table_val_to_int(flat[k]) | (k << 8):07X}", 8)
+
 
 def gen_public_assigned(general_category_public_assigned, out):
     return ""
@@ -853,8 +882,6 @@ if __name__ == '__main__':
         out.write("// clang-format off\n")
         out.write(f'#include \"{header_basename}\"\n')
         out.write("\n")
-
-
         extern_decls.append(gen_combining_class(data.combining_classes, out))
 
         extern_decls.append(gen_composition_table(data.canon_comp, out))
@@ -864,6 +891,14 @@ if __name__ == '__main__':
         extern_decls.append(gen_combining_mark(data.general_category_mark, out))
 
         extern_decls.append(gen_public_assigned(data.general_category_public_assigned, out))
+
+        extern_decls.append(gen_nfc_qc(data.norm_props, out))
+
+        extern_decls.append(gen_nfkc_qc(data.norm_props, out))
+
+        extern_decls.append(gen_nfd_qc(data.norm_props, out))
+
+        extern_decls.append(gen_nfkd_qc(data.norm_props, out))
 
         extern_decls.append(gen_stream_safe(data.ss_leading, data.ss_trailing, out))
     with open(header, "w", newline = "\n") as out:
@@ -895,6 +930,5 @@ typedef struct {
     std::u32string_view nfkd;
 } NormalizationTest;
 
-\n""")
+""")
         out.write("\n".join(extern_decls))
-

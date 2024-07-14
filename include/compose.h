@@ -74,6 +74,11 @@ typedef struct RecompositionIter{
 
 } RecompositionIter_t;
 
+typedef enum {
+	Yes,
+	No,
+	Maybe,
+} IsNormalized;
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +101,14 @@ void recomp_destroy(RecompositionIter_t *recomp);
 void recomp_init(RecompositionIter_t *recomp, const char *str,
 								 size_t len, DecompositionType kind);
 char32_t recomp_next(RecompositionIter_t *recomp);
+IsNormalized quick_check_nfc(const char* s);
+IsNormalized quick_check_nfd(const char* s);
+IsNormalized quick_check_nfkc(const char* s);
+IsNormalized quick_check_nfkd(const char* s);
+IsNormalized is_qc_nfc(uint32_t c);
+IsNormalized is_qc_nfd(uint32_t c);
+IsNormalized is_qc_nfkc(uint32_t c);
+IsNormalized is_qc_nfkd(uint32_t c);
 
 #ifdef __cplusplus
 }

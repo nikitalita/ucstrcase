@@ -215,7 +215,7 @@ if(BUILD_TESTS)
   endif()
 
 
-  add_executable(utf8_bench test/bench.cpp test/thirdparty/utf8proc.c test/thirdparty/utf8proc_data.c)
+  add_executable(utf8_bench test/bench.cpp test/thirdparty/utf8proc.c test/thirdparty/utf8proc_data.c test/test_stuff.cpp)
   # add_dependencies(utf8_bench ucstrcase)
   # add_sanitizer(utf8_bench)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD 23)

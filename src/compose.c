@@ -9,6 +9,8 @@
 #include "ucstrcase.h"
 #include "normtables.h"
 #include "data.h"
+#include "simdutf-wrapper.h"
+
 #ifndef NDEBUG
 #include <assert.h>
 #else
@@ -146,6 +148,63 @@ size_t cjk_compat_variants_fully_decomposed(uint32_t c, const uint32_t **ret) {
 bool is_combining_mark(uint32_t c) {
   return bool_mph_lookup(c, COMBINING_MARK_SALT, COMBINING_MARK_KV,
                          COMBINING_MARK_SALT_SIZE, COMBINING_MARK_KV_SIZE);
+}
+
+IsNormalized is_qc_nfc(uint32_t c) {
+	return (IsNormalized)u8_mph_lookup(c, NFC_QC_SALT, NFC_QC_KV, NFC_QC_SALT_SIZE, NFC_QC_KV_SIZE);
+}
+IsNormalized is_qc_nfd(uint32_t c) {
+	return (IsNormalized)u8_mph_lookup(c, NFD_QC_SALT, NFD_QC_KV, NFD_QC_SALT_SIZE, NFD_QC_KV_SIZE);
+}
+IsNormalized is_qc_nfkc(uint32_t c) {
+	return (IsNormalized)u8_mph_lookup(c, NFKC_QC_SALT, NFKC_QC_KV, NFKC_QC_SALT_SIZE, NFKC_QC_KV_SIZE);
+}
+IsNormalized is_qc_nfkd(uint32_t c) {
+	return (IsNormalized)u8_mph_lookup(c, NFKD_QC_SALT, NFKD_QC_KV, NFKD_QC_SALT_SIZE, NFKD_QC_KV_SIZE);
+}
+
+// typedef for a function pointer like is_qfc_nfc
+typedef IsNormalized (*IsNormalizedFunc)(uint32_t);
+
+IsNormalized quick_check(const char* s, IsNormalizedFunc f);
+
+inline
+IsNormalized quick_check(const char* s, IsNormalizedFunc f){
+	IsNormalized result = Yes;
+	size_t len = strlen(s);
+	RuneResult runeResult = DecodeRuneInString(s, len);
+	while(runeResult.rune != 0 && len > 0){
+		IsNormalized res = f(runeResult.rune);
+		switch(res){
+			case No:
+				return No;
+			case Maybe:
+				result = Maybe;
+				break;
+			case Yes:
+				break;
+		}
+		s += runeResult.size;
+		len -= runeResult.size;
+		runeResult = DecodeRuneInString(s, len);
+	}
+	return result;
+}
+
+IsNormalized quick_check_nfc(const char* s){
+	return quick_check(s, is_qc_nfc);
+}
+
+IsNormalized quick_check_nfd(const char* s){
+	return quick_check(s, is_qc_nfd);
+}
+
+IsNormalized quick_check_nfkc(const char* s){
+	return quick_check(s, is_qc_nfkc);
+}
+
+IsNormalized quick_check_nfkd(const char* s){
+	return quick_check(s, is_qc_nfkd);
 }
 
 size_t stream_safe_trailing_nonstarters(uint32_t c) {

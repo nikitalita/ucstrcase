@@ -979,31 +979,20 @@ void test_dot_i(){
 	}
 }
 #include <simdutf.h>
-std::string our_normalize_str(const char *s, size_t len){
-	DecompositionIter_t iter;
-	decomposition_iter_init(&iter, s, len, DecompositionType::CompatibleCaseFold);
-	char32_t rune = 0xFFFD;
-	std::vector<char32_t> runes;
-	runes.reserve(STRING_SIZE*4*8);
-	while (rune != 0) {
-		rune = decomposition_iter_next(&iter);
-		runes.push_back(rune);
-	}
-	std::string result;
-//  size_t sz2 = simdutf_utf8_length_from_utf32(runes.data(), runes.size());
-  size_t sz2 = runes.size() * 4;
-	result.resize(sz2);
+#include "test_stuff.h"
 
+template <bool recomposing = false>
+std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
+	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString(s, len, kind);
+	std::string result;
+	size_t sz2 = runes.size() * 4;
+	result.resize(sz2);
 	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
 	result.resize(sz);
-//		char * result = (char *)malloc(runes.size() * 4);
-//	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result);
-//	result = (char *)realloc(result, sz + 1);
-
 	return result;
 }
 
-void test_converting(const char** s, size_t table_len = TABLE_SIZE){
+void test_converting(const char** s, size_t table_len = TABLE_SIZE, bool recompose = false, DecompositionType kind = DecompositionType::CanonicalCaseFold){
 	// get start time
 	int64_t start = getCurrentNanos();
 	int64_t duration = 0;
@@ -1014,7 +1003,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	for (int i = 0; i < iters; i+=inc){
 		auto a = s[i % table_len];
 		start = getCurrentNanos();
-		auto result = our_normalize_str(a, strlen(a));
+		auto result = recompose ? normalize_str<true>(a, strlen(a), kind) : normalize_str<false>(a, strlen(a), kind);
 		duration += getCurrentNanos() - start;
 
 		if (result.empty()){
@@ -1023,12 +1012,25 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 			successes++;
 		}
 	}
-	printf("our_normalize_str conversion iters %llu, failures %lld, time : %lldms\n",iters, failures, (duration)/ 1000000);
+	auto options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE );
+	if (recompose){
+		options = (utf8proc_option_t)(options | UTF8PROC_COMPOSE);
+	} else {
+		options = (utf8proc_option_t)(options | UTF8PROC_DECOMPOSE);
+	}
+	if (kind == DecompositionType::CompatibleCaseFold){
+		options = (utf8proc_option_t)(options | UTF8PROC_COMPAT | UTF8PROC_CASEFOLD);
+	} else if (kind == DecompositionType::CanonicalCaseFold){
+		options = (utf8proc_option_t)(options | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD);
+	} else if (kind == DecompositionType::Compatible){
+		options = (utf8proc_option_t)(options | UTF8PROC_COMPAT);
+	}
+	printf("recompose_str conversion iters %llu, failures %lld, time : %lldms\n",iters, failures, (duration)/ 1000000);
 	for (int i = 0; i < iters; i+=inc){
 		auto str = s[i % table_len];
 		start = getCurrentNanos();
 		const char *retval;
-		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD));
+		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&retval, options);
 
 		duration += getCurrentNanos() - start;
 
@@ -1040,6 +1042,58 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	}
 	printf("utf8proc_map conversion iters %llu, failures %lld, time : %lldms\n",iters, failures, (duration)/ 1000000);
 
+}
+
+typedef IsNormalized (*qc_func)(const char *s);
+typedef std::string (*normalize_func)(const char *s, size_t len, DecompositionType kind);
+
+struct qcTestResult{
+	int64_t duration;
+	int64_t failures;
+	int64_t successes;
+};
+
+qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func, DecompositionType kind);
+inline
+qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func, DecompositionType kind){
+	int64_t start = getCurrentNanos();
+	int64_t duration = 0;
+	int64_t failures = 0;
+	int64_t successes = 0;
+	int inc = 2;
+	const int64_t iters = table_len * TABLE_TRAVERSALS * inc;
+	for (int i = 0; i < iters; i+=inc){
+		auto a = s[i % table_len];
+		auto a_len = strlen(a);
+		auto norm_a = norm_func(a, a_len, kind);
+
+		start = getCurrentNanos();
+		IsNormalized result = func(norm_a.c_str());
+		duration += getCurrentNanos() - start;
+		if (result == IsNormalized::No){
+			failures++;
+		} else {
+			successes++;
+		}
+	}
+	return {duration, failures, successes};
+}
+
+void test_quickcheck(const char **s, size_t table_len = TABLE_SIZE){
+	// get start time
+
+	qcTestResult tresut;
+	int inc = 2;
+	const int64_t iters = table_len * TABLE_TRAVERSALS * inc;
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfc, normalize_str<true>, DecompositionType::Canonical);
+	printf("qc_nfc iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfd, normalize_str<false>, DecompositionType::Canonical);
+	printf("qc_nfd iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfkc, normalize_str<true>, DecompositionType::Compatible);
+	printf("qc_nfkc iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfkd, normalize_str<false>, DecompositionType::Compatible);
+	printf("qc_nfkd iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
+	test_converting(s, table_len, true, DecompositionType::Canonical);
 }
 
 
@@ -1063,6 +1117,7 @@ int main() {
 
 	generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	printf("**** Generated Matching UTF-8 strings *****\n");
+	test_quickcheck(s, TABLE_SIZE);
 	run_tests(s, true, TABLE_SIZE, 0, false, filters);
 	free_all_strings();
 

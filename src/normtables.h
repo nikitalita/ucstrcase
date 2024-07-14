@@ -24,8 +24,7 @@ typedef struct {
 extern "C" {
 #endif
 uint32_t composition_table_astral(uint32_t ch, uint32_t c2);
-bool is_public_assigned(uint32_t c);
-
+const uint32_t stream_safe_leading_nonstarters(uint32_t c);
 #ifdef __cplusplus
 }
 #endif
@@ -77,6 +76,30 @@ extern const size_t COMBINING_MARK_SALT_SIZE;
 extern const uint32_t COMBINING_MARK_KV[2450];
 extern const size_t COMBINING_MARK_KV_SIZE;
 
+
+
+extern const uint16_t NFC_QC_SALT[1231];
+extern const size_t NFC_QC_SALT_SIZE;
+extern const uint32_t NFC_QC_KV[1231];
+extern const size_t NFC_QC_KV_SIZE;
+
+
+extern const uint16_t NFKC_QC_SALT[5039];
+extern const size_t NFKC_QC_SALT_SIZE;
+extern const uint32_t NFKC_QC_KV[5039];
+extern const size_t NFKC_QC_KV_SIZE;
+
+
+extern const uint16_t NFD_QC_SALT[13233];
+extern const size_t NFD_QC_SALT_SIZE;
+extern const uint32_t NFD_QC_KV[13233];
+extern const size_t NFD_QC_KV_SIZE;
+
+
+extern const uint16_t NFKD_QC_SALT[17029];
+extern const size_t NFKD_QC_SALT_SIZE;
+extern const uint32_t NFKD_QC_KV[17029];
+extern const size_t NFKD_QC_KV_SIZE;
 
 
 extern const uint16_t TRAILING_NONSTARTERS_SALT[1090];
