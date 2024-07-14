@@ -75,6 +75,8 @@ const (
 	MaxChar              = 0x10FFFF
 	caseFoldShift        = 19
 	caseFoldSize         = 8192
+	fullCaseFoldShift    = 24
+	fullCaseFoldSize     = 256
 	foldMapShift         = 24
 	foldMapSize          = 256
 	upperLowerTableSize  = 8192
@@ -91,12 +93,18 @@ type foldPair struct {
 	To   uint32
 }
 
+type fullFoldPair struct {
+	From uint32
+	To   [4]uint16
+}
+
 var (
-	categories *unicode.RangeTable
-	caseFolds  []foldPair
-	caseRanges []unicode.CaseRange // used by toLower and toUpper
-	caseOrbit  []foldPair          // used by simpleFold
-	asciiFold  [unicode.MaxASCII + 1]uint16
+	categories    *unicode.RangeTable
+	caseFolds     []foldPair
+	fullCaseFolds []fullFoldPair
+	caseRanges    []unicode.CaseRange // used by toLower and toUpper
+	caseOrbit     []foldPair          // used by simpleFold
+	asciiFold     [unicode.MaxASCII + 1]uint16
 )
 
 var (
@@ -119,6 +127,65 @@ func loadCaseFolds() {
 		chars[p1].foldCase = p2
 	})
 	slices.SortFunc(caseFolds, func(a, b foldPair) int {
+		return cmp.Compare(a.From, b.From)
+	})
+}
+
+func loadFullCaseFolds() {
+	// check that loadCaseFolds() was called
+	if len(caseFolds) == 0 {
+		log.Panic("loadCaseFolds() must be called before loadFullCaseFolds()")
+	}
+	ucd.Parse(gen.OpenUCDFile("CaseFolding.txt"), func(p *ucd.Parser) {
+		kind := p.String(1)
+		if kind != "F" {
+			// Only care about 'full' and 'simple' foldings.
+			return
+		}
+		p1 := p.Rune(0)
+		p2 := p.Runes(2)
+		p2_2 := [4]uint16{0, 0, 0, 0}
+		if len(p2) > 3 {
+			// crash
+			log.Panicf("fullCaseFolds: too many runes: %d\nNEED TO UPDATE THE GENERATOR SCRIPT!!!!!!!!!!!!!!!!!!!!!!!!", len(p2))
+		}
+		for i, r := range p2 {
+			p2_2[i] = uint16(r)
+		}
+		fullCaseFolds = append(fullCaseFolds, fullFoldPair{uint32(p1), p2_2})
+	})
+	// print out the whole thing
+	for _, p := range fullCaseFolds {
+		fmt.Printf("%q -> %q\n", p.From, p.To)
+	}
+	// iterate over fullCaseFolds and see if any .From values from fullCaseFolds are in .To values in caseFolds
+	// if they are, then we need to add a new entry to fullCaseFolds with the .From value from caseFolds and the .To value from fullCaseFolds
+	// this is because we don't want to use the upper/lower-case variants of these runes
+	i := 0
+	if i == 1 {
+		print("hooray")
+	}
+	for _, p := range fullCaseFolds {
+		for _, q := range caseFolds {
+			if p.From == uint32(q.To) {
+				// check if q.From is already in fullCaseFolds
+				found := false
+				for _, r := range fullCaseFolds {
+					if uint32(q.From) == r.From {
+						found = true
+						break
+					}
+				}
+				if found {
+					continue
+				}
+				fullCaseFolds = append(fullCaseFolds, fullFoldPair{uint32(q.From), p.To})
+				break
+			}
+		}
+	}
+
+	slices.SortFunc(fullCaseFolds, func(a, b fullFoldPair) int {
 		return cmp.Compare(a.From, b.From)
 	})
 }
@@ -738,13 +805,15 @@ func genCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 	for i := 0; i < caseFoldSize; i++ {
 		// check if i is in `hashes`
 		var h foldPair
+		found := false
 		for _, _h := range hashes {
 			if uint32(i) == _h.From {
 				h = _h
+				found = true
 				break
 			}
 		}
-		if h.From == 0 {
+		if !found {
 			if last_line_had_hashes {
 				fmt.Fprint(w, "\n\t")
 			} else {
@@ -757,11 +826,122 @@ func genCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
 		p := pairs[h.To]
 		last_line_had_hashes = true
 		fmt.Fprintf(w, "\n\t{0x%04X, 0x%04X}, // %d: %q => %q", p.From, p.To, h.From, p.From, p.To)
-		hashes = hashes[1:]
+		// hashes = hashes[1:]
 	}
 	fmt.Fprint(w, "\n};\n\n")
 }
 
+func get_rune(u uint32) rune {
+	if u > unicode.MaxRune {
+		return rune(unicode.ReplacementChar)
+	}
+	return rune(u)
+}
+
+func genFullCaseFolds(w *bytes.Buffer, hw *bytes.Buffer, firstValidHash bool) {
+	folds := fullCaseFolds
+	inputs := make([]uint32, len(folds))
+	for i, p := range folds {
+		inputs[i] = p.From
+	}
+	input_strings := make([]string, len(inputs))
+	for i, u := range inputs {
+		str := fmt.Sprintf("%q", get_rune(u))
+		input_strings[i] = str
+	}
+	testf := get_rune(0x0130)
+	if testf == 'İ' {
+		fmt.Println("hooray")
+	}
+	conf := HashConfig{
+		TableName:      "_FullCaseFolds",
+		TableSize:      fullCaseFoldSize,
+		HashShift:      uint32(fullCaseFoldShift),
+		FirstValidHash: firstValidHash,
+	}
+	seed := conf.GenerateHashValues(inputs)
+	// TODO: probably don't need this
+	pairs := make([]fullFoldPair, len(folds))
+	copy(pairs, folds)
+	slices.SortFunc(pairs, func(a, b fullFoldPair) int {
+		return cmp.Compare(a.From, b.From)
+	})
+
+	hashes := make([]foldPair, 0, len(pairs))
+	for i, p := range pairs {
+		hashes = append(hashes, foldPair{
+			From: hash(p.From, seed, uint32(fullCaseFoldShift)),
+			To:   uint32(i),
+		})
+	}
+	// check for collisions
+	for i, p := range pairs {
+		for j, q := range pairs {
+			if i == j {
+				continue
+			}
+			if p.From == q.From {
+				log.Panicf("collision: %q %q\n", get_rune(p.From), get_rune(q.From))
+			}
+		}
+	}
+
+	slices.SortFunc(hashes, func(a, b foldPair) int {
+		return cmp.Compare(a.From, b.From)
+	})
+
+	fmt.Fprint(hw, "\n")
+	fmt.Fprintf(hw, "static const uint32_t _FullCaseFoldsSeed = 0x%04X;\n", seed)
+	fmt.Fprintf(hw, "static const uint32_t _FullCaseFoldsShift = %d;\n", fullCaseFoldShift)
+	fmt.Fprint(hw, "\n")
+
+	fmt.Fprintln(w, "// _FullCaseFolds stores all Unicode simple case-folds.")
+	fmt.Fprintf(w, "const fullFoldPair _FullCaseFolds[%d] = {\n", fullCaseFoldSize)
+	// in the range of 0..fullCaseFoldSize-1, NOT hashes
+	var last_line_had_hashes bool = false
+	for i := 0; i < fullCaseFoldSize; i++ {
+		// check if i is in `hashes`
+		var h foldPair = foldPair{0, 0}
+		found := false
+		for _, _h := range hashes {
+			if uint32(i) == _h.From {
+				h = _h
+				found = true
+				break
+			}
+		}
+		if !found {
+			if last_line_had_hashes {
+				fmt.Fprint(w, "\n\t")
+			} else {
+				fmt.Fprint(w, " ")
+			}
+			fmt.Fprint(w, "{0,{0,0,0,0}},")
+			last_line_had_hashes = false
+			continue
+		}
+		p := pairs[h.To]
+		last_line_had_hashes = true
+		// get the string value of p.To, but without any null bytes
+		// p.To is an array of 4 uint16 values
+		// vector of uint16 values without any null bytes
+		// NOT an array
+		pto_string := "[ "
+		for i, v := range p.To {
+			if v == 0 {
+				break
+			}
+			if i > 0 {
+				pto_string = pto_string + ", "
+			}
+			pto_string = pto_string + fmt.Sprintf("%q", v)
+		}
+		pto_string = pto_string + " ]"
+		fmt.Fprintf(w, "\n\t{0x%04X, {0x%04X,0x%04X,0x%04X,0x%04X}}, // %d: %q => %q", p.From, p.To[0], p.To[1], p.To[2], p.To[3], h.From, p.From, pto_string)
+		// hashes = hashes[1:]
+	}
+	fmt.Fprint(w, "\n};\n\n")
+}
 func dedupe(r []rune) []rune {
 	if len(r) < 2 {
 		return r
@@ -1074,6 +1254,11 @@ typedef struct foldPair_t{
     uint32_t To;
 } foldPair;
 
+typedef struct fullFoldPair_t{
+    uint32_t From;
+    uint16_t To[4];
+} fullFoldPair;
+
 typedef struct {
     uint16_t r;
     uint16_t a[2];
@@ -1105,6 +1290,7 @@ const uint16_t * getFoldMap(int i){
 func writeHeaderSuffix(w *bytes.Buffer) {
 	const s = `
 extern const foldPair _CaseFolds[%d];
+extern const fullFoldPair _FullCaseFolds[%d];
 extern const uint32_t _UpperLower[%d][2];
 extern const uint16_t _FoldMap[%d][4];
 extern const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower[%d];
@@ -1119,7 +1305,7 @@ const uint16_t * getFoldMap(int i);
 }
 #endif
 `
-	fmt.Fprintf(w, s, caseFoldSize, upperLowerTableSize, foldMapSize, foldMapSize)
+	fmt.Fprintf(w, s, caseFoldSize, fullCaseFoldSize, upperLowerTableSize, foldMapSize, foldMapSize)
 }
 
 func runCommand(dir string, args ...string) {
@@ -1679,7 +1865,8 @@ func loadCatFold(m map[string]map[rune]bool) map[string]*unicode.RangeTable {
 func initTables(root, tablesFile string) {
 	loadTableInfo(root, tablesFile)
 	loadChars()
-	loadCaseFolds()                               // download Unicode tables
+	loadCaseFolds() // download Unicode tables
+	loadFullCaseFolds()
 	foldCategories, foldScripts := loadCasefold() // TODO: this is slow (~200ms)
 
 	cats := []map[string]*unicode.RangeTable{
@@ -1820,6 +2007,7 @@ func realMain() int {
 
 	firstValidHash := flag.Bool("first-valid-hash", false,
 		"use the first valid hash instead of performing an exhaustive search (testing only, much faster)")
+	force := flag.Bool("force", false, "force update of the generated tables file")
 
 	outputDir := flag.String("dir", root, "write generated tables to this directory")
 
@@ -1900,7 +2088,7 @@ func realMain() int {
 		return s
 	}
 
-	if fileExists(tablesFile) &&
+	if !*force && fileExists(tablesFile) &&
 		gen.UnicodeVersion() == tableInfo.UnicodeVersion &&
 		gen.CLDRVersion() == tableInfo.CLDRVersion &&
 		foldHash == tableInfo.CaseFoldHash &&
@@ -1984,6 +2172,7 @@ func realMain() int {
 		gen.WriteUnicodeVersion(&hw)
 		gen.WriteCLDRVersion(&hw)
 
+		genFullCaseFolds(&w, &hw, *firstValidHash)
 		genCaseFolds(&w, &hw, *firstValidHash)
 		genUpperLowerTable(&w, &hw, *firstValidHash)
 		genFoldTable(&w, &hw, *firstValidHash)

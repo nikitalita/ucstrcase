@@ -5,10 +5,11 @@
         "unicode_version": "15.0.0",
         "cldr_version": "32",
         "case_fold_hash": "26ed8b8eee3e8fb11d5bc828b898e9b714fed8d34dea08089dde133d0b10fb04",
-        "gen_go_hash": "16f7c620904bad869b48f65e9d807264302d728b489d33693fad0131046e897b",
+        "gen_go_hash": "23142624580fccb1e3814f7a8363c95d728d9a075417864e9f719ce6da8d3733",
         "table_hashes": {
             "_CaseFolds": 4292873350,
             "_FoldMap": 2521300993,
+            "_FullCaseFolds": 2135429832,
             "_UpperLower": 1793588629
         }
     }

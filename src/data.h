@@ -11,6 +11,11 @@ typedef struct foldPair_t{
     uint32_t To;
 } foldPair;
 
+typedef struct fullFoldPair_t{
+    uint32_t From;
+    uint16_t To[4];
+} fullFoldPair;
+
 typedef struct {
     uint16_t r;
     uint16_t a[2];
@@ -19,6 +24,10 @@ typedef struct {
 
 // Built from Unicode version "15.0.0".
 // Built from CLDR version "32".
+
+static const uint32_t _FullCaseFoldsSeed = 0x7F4812C8;
+static const uint32_t _FullCaseFoldsShift = 24;
+
 
 static const uint32_t _CaseFoldsSeed = 0xFFE00C86;
 static const uint32_t _CaseFoldsShift = 19;
@@ -37,6 +46,7 @@ static const uint32_t _FoldMapExcludingUpperLowerShift = 24;
 
 
 extern const foldPair _CaseFolds[8192];
+extern const fullFoldPair _FullCaseFolds[256];
 extern const uint32_t _UpperLower[8192][2];
 extern const uint16_t _FoldMap[256][4];
 extern const _FoldMapExcludingUpperLowerItem _FoldMapExcludingUpperLower[256];

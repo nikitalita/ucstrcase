@@ -8,7 +8,7 @@
 #include <string.h>
 #include "ucstrcase.h"
 #include "normtables.h"
-
+#include "data.h"
 #ifndef NDEBUG
 #include <assert.h>
 #else
@@ -386,6 +386,33 @@ void decomposition_iter_push_back(DecompositionIter_t *iter, uint32_t ch) {
     tinybuf_push_back(&iter->buffer, (DecompV){class, ch});
   }
 }
+const uint16_t * getFullCaseFold(uint32_t r);
+void decomposition_iter_case_fold(DecompositionIter_t *iter, uint32_t ch);
+
+inline
+const uint16_t * getFullCaseFold(uint32_t r){
+	uint32_t h = (r * _FullCaseFoldsSeed) >> _FullCaseFoldsShift;
+	const fullFoldPair * p = &_FullCaseFolds[h];
+	if (unlikely(p->From == r)) {
+		return p->To;
+	}
+	return NULL;
+}
+inline
+void decomposition_iter_case_fold(DecompositionIter_t *iter, uint32_t ch) {
+	const uint16_t *fold = getFullCaseFold(ch);
+	if (likely(!fold)){
+			decomposition_iter_decompose(iter, caseFold(ch));
+			return;
+	}
+	int i = 0;
+	uint16_t fold_ch = fold[i];
+	while (fold_ch != 0 && i < 3) {
+		decomposition_iter_decompose(iter, fold_ch);
+		fold_ch = fold[++i];
+	}
+}
+
 
 void decomposition_iter_reset_buffer(DecompositionIter_t *iter) {
   uint32_t pending = tinybuf_size(&iter->buffer) - iter->ready_end;
@@ -428,9 +455,10 @@ DecompV decomposition_iter_next_ccc(DecompositionIter_t *iter) {
 				break;
 			}
 			if (iter->kind == CanonicalCaseFold || iter->kind == CompatibleCaseFold) {
-				result.rune = caseFold(result.rune);
+				decomposition_iter_case_fold(iter, result.rune);
+			} else {
+				decomposition_iter_decompose(iter, result.rune);
 			}
-			decomposition_iter_decompose(iter, result.rune);
 			iter->pos += result.size;
 		} else {
 			if (tinybuf_size(&iter->buffer) == 0) {

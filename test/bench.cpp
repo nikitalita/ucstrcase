@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 #include "data.h"
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
-#define utf8_char_probability 5 // 2-percent chance of generating a UTF-8 character
+#define utf8_char_probability 100 // 2-percent chance of generating a UTF-8 character
 #define utf8_invalid_probability 20 // 1-percent chance of generating an invalid UTF-8 character
 #define TABLE_SIZE 1000000
 #define TABLE_TRAVERSALS 1
@@ -313,15 +313,14 @@ int clamp(int n) {
 #define BUF_MAX_SIZE 100000
 //utf8proc_int32_t a_buf[BUF_MAX_SIZE];
 //utf8proc_int32_t b_buf[BUF_MAX_SIZE];
-int test_norm_match(const char * a, const char * b){
-	auto a_size = strlen(a);
-	auto b_size = strlen(b);
+int faster_utf8proc_compare_n(const char * a, const char * b, size_t len){
+	auto a_size = strnlen(a, len);
+	auto b_size = strnlen(b, len);
 	auto max_size = a_size > b_size ? a_size : b_size;
 	const size_t buf_max_size = max_size * 4 * 4;
- utf8proc_int32_t *a_buf = (utf8proc_int32_t*)malloc(a_size * 4 *4);
- utf8proc_int32_t *b_buf = (utf8proc_int32_t*)malloc(b_size * 4 *4);
-	static const auto options = UTF8PROC_NULLTERM | UTF8PROC_STABLE |
-															UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT | UTF8PROC_CASEFOLD;
+	utf8proc_int32_t *a_buf = (utf8proc_int32_t*)malloc(a_size * 4 *4);
+	utf8proc_int32_t *b_buf = (utf8proc_int32_t*)malloc(b_size * 4 *4);
+	static const auto options = UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD;
 	auto a_act_size = utf8proc_decompose_custom((utf8proc_uint8_t*)a, a_size, a_buf, buf_max_size, (utf8proc_option_t)options, nullptr, nullptr);
 	auto b_act_size = utf8proc_decompose_custom((utf8proc_uint8_t*)b, b_size, b_buf, buf_max_size, (utf8proc_option_t)options, nullptr, nullptr);
 	a_act_size = utf8proc_normalize_utf32(a_buf, a_act_size, (utf8proc_option_t)options);
@@ -337,6 +336,11 @@ int test_norm_match(const char * a, const char * b){
 	// free(a_buf);
 	// free(b_buf);
 	return match;
+}
+int faster_utf8proc_compare(const char * a, const char * b) {
+	size_t a_len = strlen(a);
+	size_t b_len = strlen(b);
+	return faster_utf8proc_compare_n(a, b, a_len > b_len ? a_len : b_len);
 }
 
 int utf8proc_casecmp(const char *a, const char *b){
@@ -449,10 +453,10 @@ int run_test(testType type, const char* a, const char* b,  int64_t len = -1, boo
       result = utf8ncasecmp((utf8_int8_t*)a, (utf8_int8_t*)b, len);
       break;
     case UTF8PROC_CASECMP:
-      result = utf8proc_casecmp(a, b);
+      result = faster_utf8proc_compare(a, b);
       break;
     case UTF8PROC_CASECMP_N:
-      result = utf8proc_casecmp_n(a, b, len);
+      result = faster_utf8proc_compare_n(a, b, len);
       break;
     case NEW_NORMALIZING_COMPARE:
       result = new_normalizing_compare(a, b);
@@ -711,10 +715,10 @@ void test_thing(){
   const uint8_t test2[] = {'c', 0xCC, 0xA7, 0xCC, 0x81, 0};
   const char* test1_ptr = (const char*)test1;
   const char* test2_ptr = (const char*)test2;
-  if (test_norm_match((const char *)test1, (const char *)test2) != 0){
-    std::cout << "Error: test_norm_match: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+  if (faster_utf8proc_compare((const char *)test1, (const char *)test2) != 0){
+    std::cout << "Error: faster_utf8proc_compare: no match for matching strings: " << test1 << " and " << test2 << std::endl;
   } else {
-    std::cout << "SUCCESS: test_norm_match: match for matching strings: " << test1 << " and " << test2 << std::endl;
+    std::cout << "SUCCESS: faster_utf8proc_compare: match for matching strings: " << test1 << " and " << test2 << std::endl;
   }
 }
 
@@ -731,7 +735,7 @@ void test_normalization(const char **s, size_t table_len = TABLE_SIZE){
     auto a = s[i % table_len];
     auto b = s[(i+1) % table_len];
 		start = getCurrentNanos();
-		int result = test_norm_match(a, b);
+		int result = faster_utf8proc_compare(a, b);
 		duration += getCurrentNanos() - start;
 
     if (result != 0){
@@ -893,42 +897,62 @@ int new_normalizing_compare(const char *s, const char *t){
 //	recomp_init(&iter1, s, s_len, DecompositionType::CompatibleCaseFold);
 //	recomp_init(&iter2, t, t_len, DecompositionType::CompatibleCaseFold);
 // decomp
-	DecompositionIter_t iter1;
-	DecompositionIter_t iter2;
-	decomposition_iter_init(&iter1, s, s_len, DecompositionType::CompatibleCaseFold);
-	decomposition_iter_init(&iter2, t, t_len, DecompositionType::CompatibleCaseFold);
+	RecompositionIter_t iter1;
+	RecompositionIter_t iter2;
+	recomp_init(&iter1, s, s_len, DecompositionType::CanonicalCaseFold);
+	recomp_init(&iter2, t, t_len, DecompositionType::CanonicalCaseFold);
 	char32_t rune1 = 0xFFFD;
 	char32_t rune2 = 0xFFFD;
-//	std::vector<char32_t> runes1;
-//	std::vector<char32_t> runes2;
-	while (rune1 != 0 && rune2 != 0){
-//		rune1 = recomp_next(&iter1);
-//		rune2 = recomp_next(&iter2);
-		rune1 = decomposition_iter_next(&iter1);
-		rune2 = decomposition_iter_next(&iter2);
 #ifndef NDEBUG
-//		runes1.push_back(rune1);
-//		runes2.push_back(rune2);
+	std::vector<char32_t> runes1;
+	std::vector<char32_t> runes2;
+#endif
+	while (rune1 != 0 && rune2 != 0){
+		rune1 = recomp_next(&iter1);
+		rune2 = recomp_next(&iter2);
+#ifndef NDEBUG
+		runes1.push_back(rune1);
+		runes2.push_back(rune2);
 #endif
 		if (rune1 != rune2){
 #ifndef NDEBUG
-//			char32_t *r1 = runes1.data();
-//			char32_t *r2 = runes2.data();
-//      std::u32string s1 = std::u32string(r1, r1 + runes1.size());
-//      std::u32string s2 = std::u32string(r2, r2 + runes2.size());
-////			std::cout << "Error: new_normalizing_compare: no match for matching strings at: " << s + iter1.iter.pos << " and " << t + iter2.iter.pos << std::endl;
-//      // get the locale that enables printing 32 bit characters
-//      std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> thing;
-//      std::cout << thing.to_bytes(s1) << " and " << thing.to_bytes(s2) << std::endl;
+			char32_t *r1 = runes1.data();
+			char32_t *r2 = runes2.data();
+      std::u32string s1 = std::u32string(r1, r1 + runes1.size());
+      std::u32string s2 = std::u32string(r2, r2 + runes2.size());
+//			std::cout << "Error: new_normalizing_compare: no match for matching strings at: " << s + iter1.iter.pos << " and " << t + iter2.iter.pos << std::endl;
+      // get the locale that enables printing 32 bit characters
+      std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> thing;
+      std::cout << thing.to_bytes(s1) << " and " << thing.to_bytes(s2) << std::endl;
 #endif
-			decomposition_iter_destroy(&iter1);
-			decomposition_iter_destroy(&iter2);
+			recomp_destroy(&iter1);
+			recomp_destroy(&iter2);
 			return clamp((int)((int64_t)rune1 - (int64_t)rune2));
 		}
 	}
-	decomposition_iter_destroy(&iter1);
-	decomposition_iter_destroy(&iter2);
+	recomp_destroy(&iter1);
+	recomp_destroy(&iter2);
 	return clamp((int)((int64_t)rune1 - (int64_t)rune2));
+}
+void test_dot_i2() {
+	const char *test1 = "İ";
+	const char *test2 = "i";
+//  const char* test1 = "ẞ";
+//	const char* test2 = "ß";
+	const char * norm1 = tolower_normalize(test1);
+	const char * norm2 = tolower_normalize(test2);
+	if (strcmp(norm1, norm2) != 0) {
+		std::cout << "Error: tolower_normalize: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+	}
+	else {
+		std::cout << "SUCCESS: tolower_normalize: match for matching strings: " << test1 << " and " << test2 << std::endl;
+	}
+	if (new_normalizing_compare(test1, test2) != 0) {
+		std::cout << "Error: new_normalizing_compare: no match for matching strings: " << test1 << " and " << test2 << std::endl;
+	}
+	else {
+		std::cout << "SUCCESS: new_normalizing_compare: match for matching strings: " << test1 << " and " << test2 << std::endl;
+	}
 }
 
 void test_dot_i(){
@@ -1004,7 +1028,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 		auto str = s[i % table_len];
 		start = getCurrentNanos();
 		const char *retval;
-		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_COMPAT | UTF8PROC_STABLE | UTF8PROC_DECOMPOSE));
+		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&retval, (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_CASEFOLD));
 
 		duration += getCurrentNanos() - start;
 
@@ -1021,6 +1045,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 
 //U"ę<Z" U"ę<z"
 int main() {
+	test_dot_i2();
   //  test_icu();
   //  return 0;
   // return 0;
@@ -1031,23 +1056,23 @@ int main() {
   // generate a random utf-8 string
 
 //	std::vector<testType> filters = {UCSTRCASECMP, UCSTRCASECMP_N, NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N, UTF8CASECMP, UTF8NCASECMP, };
-	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N};
+	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, UTF8PROC_CASECMP, UTF8PROC_CASECMP_N};
+//	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N};
 
 
 
+	generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
+	printf("**** Generated Matching UTF-8 strings *****\n");
+	run_tests(s, true, TABLE_SIZE, 0, false, filters);
+	free_all_strings();
 
 
   generateRandomMatchingStrings3(s, TABLE_SIZE, STRING_SIZE);
 	 printf("**** Generated Random Matching UTF-8 strings *****\n");
-	test_converting(s, TABLE_SIZE);
 	run_tests(s, true, TABLE_SIZE, 0, false, filters);
-	test_normalization(s, TABLE_SIZE);
+//	test_converting(s, TABLE_SIZE);
+//	test_normalization(s, TABLE_SIZE);
 	free_all_strings();
-
-	 generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
-	 printf("**** Generated Matching UTF-8 strings *****\n");
-	 run_tests(s, true, TABLE_SIZE, 0, false, filters);
-   free_all_strings();
 
   generateRandomMatchingStrings2(s, TABLE_SIZE, STRING_SIZE);
   printf("**** Generated Tricky matching UTF-8 strings *****\n");
