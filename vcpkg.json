@@ -18,7 +18,10 @@
             "description": "Enable tests",
             "dependencies": [
                 {"name": "icu"},
-                {"name": "pkgconf"}
+                {"name": "pkgconf"},
+                {"name": "fmt"},
+                {"name": "simdutf"},
+                {"name": "catch2"}
             ]
         }
     }

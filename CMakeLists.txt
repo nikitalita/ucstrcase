@@ -29,6 +29,7 @@ project(ucstrcase VERSION 0.1.0 LANGUAGES CXX C)
 set(UTF8_USE_SANITIZER "" CACHE STRING "Set which Clang Sanitizer to use")
 option(BUILD_TESTS "Build the tests" OFF)
 option(GENERATE_DATA "Generate the data" OFF)
+option(USE_SIMDUTF "Link against simdutf for converting strings" ON)
 
 
 set(UCSTRCASE_UNICODE_VERSION "15.0.0")
@@ -88,8 +89,7 @@ message("UCSTRCASE_CMAKE_PROJECT_CONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_CONFIG_F
 message("UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE: ${UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE}")
 message("UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE}")
 
-
-add_library(ucstrcase src/ucstrcase.c src/data.c)
+add_library(ucstrcase src/ucstrcase.c src/data.c src/compose.c src/normtables.c)
 target_include_directories(ucstrcase PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${UCSTRCASE_INCLUDE_INSTALL_DIR}>)
@@ -102,9 +102,18 @@ configure_package_config_file(
         "${UCSTRCASE_CMAKE_PROJECT_CONFIG_FILE}"
         INSTALL_DESTINATION ${UCSTRCASE_CONFIG_INSTALL_DIR}
 )
+
+
+
+if (USE_SIMDUTF)
+  find_package(simdutf CONFIG REQUIRED)
+  add_subdirectory(simdutf-wrapper)
+  target_compile_definitions(ucstrcase PRIVATE UCSTRCASE_USE_SIMDUTF)
+  target_link_libraries(ucstrcase PRIVATE "$<BUILD_INTERFACE:simdutf-wrapper>")
+endif()
 #configure the Config.pc.in
 configure_file(${UCSTRCASE_CMAKE_PKGCONFIG_TEMPLATE} "${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE}" @ONLY)
-
+#
 # configure_package_config_file(ucstrcaseConfig.cmake.in ucstrcaseConfig.cmake INSTALL_DESTINATION share/ucstrcase)
 # add install target
 install(
@@ -130,9 +139,22 @@ install(FILES ${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE} DESTINATION "${UCSTRCASE
 if (GENERATE_DATA)
   add_subdirectory(internal/gen)
   add_dependencies(ucstrcase run_gentables)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_custom_target(
+#          OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/normtables.h" "${CMAKE_CURRENT_SOURCE_DIR}/src/normtables.c" "${CMAKE_CURRENT_SOURCE_DIR}/test/normalization_tests.h" "${CMAKE_CURRENT_SOURCE_DIR}/test/normalization_tests.c"
+          generate_normtables
+          COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/internal/unicode.py"
+          WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+          COMMENT "Generating normalization tables..."
+          USES_TERMINAL
+  )
+  add_dependencies(ucstrcase generate_normtables)
 endif()
 
+
 if(BUILD_TESTS)
+  add_executable(test_thingy test/testthingy.c)
+
   if(VCPKG_TARGET_TRIPLET)
     # clear these out every time or else it won't work when variants change
     set(ICU_LDFLAGS "")
@@ -157,10 +179,28 @@ if(BUILD_TESTS)
         message(FATAL_ERROR "\n**************************\nUse the x{32,64}-windows-static-md triplet!\n**************************\n")
       endif()
     endif()
-  endif()
+   endif()
+  find_package(fmt REQUIRED)
+  find_package(simdutf CONFIG REQUIRED)
+  find_package(catch2 CONFIG REQUIRED)
+  set(CATCH_CONFIG_CONSOLE_WIDTH "800")
+  set(CATCH_CONFIG_COLOUR_ANSI "ON")
+  add_dependencies(test_thingy simdutf-wrapper)
+  add_executable(norm_tests test/run_norm_tests.cpp test/normalization_tests.cpp test/test_stuff.cpp)
+  add_dependencies(norm_tests ucstrcase)
+  target_include_directories(norm_tests PRIVATE include src test simdutf-wrapper/include)
+  target_link_libraries(norm_tests PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
+  set(NORM_TEST_2_SOURCES test/run_norm_tests_2.cpp test/normalization_part_0_tests.cpp test/normalization_part_1_tests.cpp test/normalization_part_2_tests.cpp test/normalization_part_3_tests.cpp test/test_stuff.cpp)
 
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(ICU REQUIRED IMPORTED_TARGET icu-uc icu-i18n icu-io)
+
+  # build it as a c17 program
+  set_target_properties(test_thingy PROPERTIES C_STANDARD 17)
+  set_target_properties(test_thingy PROPERTIES C_STANDARD_REQUIRED ON)
+  # project include directory
+  target_link_libraries(test_thingy PRIVATE ucstrcase simdutf-wrapper)
+  target_include_directories(test_thingy PRIVATE simdutf-wrapper)
 
   # check if it found it
   if(ICU_FOUND)
@@ -175,17 +215,14 @@ if(BUILD_TESTS)
   endif()
 
 
-  #ensure that gentables is built before the tests
-
   add_executable(utf8_bench test/bench.cpp test/thirdparty/utf8proc.c test/thirdparty/utf8proc_data.c)
   # add_dependencies(utf8_bench ucstrcase)
   # add_sanitizer(utf8_bench)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD 23)
   set_target_properties(utf8_bench PROPERTIES CXX_STANDARD_REQUIRED ON)
   # project include directory
-  target_include_directories(utf8_bench PRIVATE include src test)
-
-  target_compile_options(utf8_bench PRIVATE ${ICU_CFLAGS})
+  target_include_directories(utf8_bench PRIVATE include src test simdutf-wrapper/include)
+  target_compile_options(utf8_bench PRIVATE ${ICU_CFLAGS} -fexperimental-library)
   # check if strcasecmp is available
   include( CheckFunctionExists )
   CHECK_FUNCTION_EXISTS(strcasecmp HAVE_STRCASECMP)
@@ -214,11 +251,16 @@ if(BUILD_TESTS)
   endif()
   target_link_libraries(utf8_bench ${ICU_LIBRARIES})
   target_link_libraries(utf8_bench ${PROJECT_NAME})
+  target_link_libraries(utf8_bench fmt::fmt)
+  target_link_libraries(utf8_bench simdutf::simdutf)
+  target_link_libraries(utf8_bench simdutf-wrapper)
 
   # print out the compile options, the linked libraries, and the linked options
+  get_target_property(utf8_bench_INCLUDE_DIRS utf8_bench INCLUDE_DIRECTORIES)
   get_target_property(utf8_bench_COMPILE_OPTIONS utf8_bench COMPILE_OPTIONS)
   get_target_property(utf8_bench_LINK_LIBRARIES utf8_bench LINK_LIBRARIES)
   get_target_property(utf8_bench_LINK_OPTIONS utf8_bench LINK_OPTIONS)
+  message(STATUS "utf8_bench_INCLUDE_DIRS: ${utf8_bench_INCLUDE_DIRS}")
   message(STATUS "utf8_bench_COMPILE_OPTIONS: ${utf8_bench_COMPILE_OPTIONS}")
   message(STATUS "utf8_bench_LINK_LIBRARIES: ${utf8_bench_LINK_LIBRARIES}")
   message(STATUS "utf8_bench_LINK_OPTIONS: ${utf8_bench_LINK_OPTIONS}")
