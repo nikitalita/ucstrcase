@@ -532,13 +532,6 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
       // worst case; string that matches
       const char* a = s[i%table_mod];
       int result = 0;
-      // start = getCurrentNanos();
-      // result = run_test((testType)type, a, a, string_length, i_plus_1_should_match);
-      // duration += getCurrentNanos() - start;
-      // if (!no_check_match && result != 0) {
-      //   std::cout << "Error: " << funcNames[type] << ": no match for matching strings!!" << std::endl;
-      //   errors++;
-      // }
       const char* b = s[(i+1)%table_mod];
       start = getCurrentNanos();
       result = run_test((testType)type, a, b, string_length, i_plus_1_should_match);
@@ -1013,36 +1006,9 @@ void test_dot_i(){
 	}
 }
 
-template <bool recomposing = false, DecompositionType kind>
-std::string normalize_str(const char *s, size_t len) {
-	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString2<kind>(s, len);
-	std::string result;
-	size_t sz2 = runes.size() * 4;
-	result.resize(sz2);
-	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
-	result.resize(sz);
-	return result;
-}
-template <bool recomposing = false, DecompositionType kind>
-std::string normalize_str(const std::u32string &s) {
-	if (!recomposing){
-		return ucstrcase::Decompositions<char32_t, kind>(s).to_string();
-	} else {
-		return ucstrcase::Recompositions<char32_t, kind>(s).to_string();
-	}
-//	auto runes = recomposing ? test_funcs::RecomposeString(s, kind) : test_funcs::DecomposeString(s, kind);
-//	std::string result;
-//	size_t sz2 = runes.size() * 4;
-//	result.resize(sz2);
-//	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
-//	result.resize(sz);
-//	return result;
-}
-
-
-//template <bool recomposing = false>
-//std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
-//	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString(s, len, kind);
+//template <bool recomposing = false, DecompositionType kind>
+//std::string normalize_str(const char *s, size_t len) {
+//	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString2<kind>(s, len);
 //	std::string result;
 //	size_t sz2 = runes.size() * 4;
 //	result.resize(sz2);
@@ -1050,6 +1016,25 @@ std::string normalize_str(const std::u32string &s) {
 //	result.resize(sz);
 //	return result;
 //}
+template <bool recomposing = false, DecompositionType kind>
+std::string normalize_str(const std::u32string &s) {
+	if (!recomposing) {
+		return ucstrcase::Decompositions<char32_t, kind>(s).to_string();
+	} else {
+		return ucstrcase::Recompositions<char32_t, kind>(s).to_string();
+	}
+}
+
+template <bool recomposing = false, DecompositionType kind>
+std::string normalize_str(const char * s, size_t len) {
+	if (!recomposing) {
+		return ucstrcase::Decompositions<char, kind>(s, len).to_string();
+	} else {
+		return ucstrcase::Recompositions<char, kind>(s, len).to_string();
+	}
+}
+
+
 
 
 template <bool recomposing = false, DecompositionType kind>
@@ -1103,7 +1088,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 		auto a = s[i % table_len];
 		auto a_u32 = test_funcs::convert_utf8_to_utf32(a);
 		start = getCurrentNanos();
-		auto result = normalize_str<recomposing, kind>(a_u32);
+		auto result = normalize_str<recomposing, kind>(a, strlen(a));
 		duration += getCurrentNanos() - start;
 		bool is_normalized = check_func(result.c_str());
 		if (!is_normalized){
