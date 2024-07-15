@@ -67,6 +67,13 @@ acceptRange acceptRanges[16] = {
     {0, 0},       {0, 0}, {0, 0}, {0, 0}, {0, 0},
 };
 
+bool is_surrogate(uint16_t uc);
+bool is_high_surrogate(uint16_t uc);
+bool is_low_surrogate(uint16_t uc);
+uint32_t surrogate_to_utf32(uint16_t high, uint16_t low);
+
+
+
 RuneResult DecodeRuneInString(const char *s, size_t length) {
   RuneResult result;
   int n = length;
@@ -190,4 +197,56 @@ int RuneLen(unsigned int r) {
     return 4;
   }
   return -1;
+}
+
+
+
+inline size_t char_utf32_to_utf8(uint32_t utf32, const char *buffer)
+// Encodes the UTF-32 encoded char into a UTF-8 string.
+// Stores the result in the buffer and returns the position
+// of the end of the buffer
+// (unchecked access, be sure to provide a buffer that is big enough)
+{
+	char *end = (char *)(buffer);
+	if (utf32 < 0x7F){ *(end++) = (char)(utf32); return 1;}
+	else if (utf32 < 0x7FF) {
+		*(end++) = 0b11000000 + (char)(utf32 >> 6);
+		*(end++) = 0b10000000 + (char)(utf32 & 0b00111111);
+		return 2;
+	} else if (utf32 < 0x10000) {
+		*(end++) = 0b11100000 + (char)(utf32 >> 12);
+		*(end++) = 0b10000000 + (char)((utf32 >> 6) & 0b00111111);
+		*(end++) = 0b10000000 + (char)(utf32 & 0b00111111);
+		return 3;
+	} else if (utf32 < 0x110000) {
+		*(end++) = 0b11110000 + (char)(utf32 >> 18);
+		*(end++) = 0b10000000 + (char)((utf32 >> 12) & 0b00111111);
+		*(end++) = 0b10000000 + (char)((utf32 >> 6) & 0b00111111);
+		*(end++) = 0b10000000 + (char)(utf32 & 0b00111111);
+		return 4;
+	}
+	return 0;
+//	*end = '\0';
+}
+
+inline bool is_surrogate(uint16_t uc) { return (uc - 0xd800u) < 2048u; }
+inline bool is_high_surrogate(uint16_t uc) { return (uc & 0xfffffc00) == 0xd800; }
+inline bool is_low_surrogate(uint16_t uc) { return (uc & 0xfffffc00) == 0xdc00; }
+
+inline uint32_t surrogate_to_utf32(uint16_t high, uint16_t low) {
+	return (high << 10) + low - 0x35fdc00;
+}
+
+inline RuneResult DecodeRuneInUTF16String(const uint16_t *input,
+																					size_t input_size)
+{
+	const uint16_t uc = *input;
+	if (!is_surrogate(uc)) {
+		return (RuneResult){uc, 1};
+	} else {
+		if (is_high_surrogate(uc) && input_size > 1 && is_low_surrogate(*input+1)){
+			return (RuneResult){surrogate_to_utf32(uc, *input+1), 2};
+		}
+	}
+	return (RuneResult){RuneError, 2};
 }

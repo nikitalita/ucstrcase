@@ -1027,14 +1027,16 @@ template <bool recomposing = false, DecompositionType kind>
 std::string normalize_str(const std::u32string &s) {
 	if (!recomposing){
 		return ucstrcase::Decompositions<char32_t, kind>(s).to_string();
+	} else {
+		return ucstrcase::Recompositions<char32_t, kind>(s).to_string();
 	}
-	auto runes = recomposing ? test_funcs::RecomposeString(s, kind) : test_funcs::DecomposeString2<kind>(s);
-	std::string result;
-	size_t sz2 = runes.size() * 4;
-	result.resize(sz2);
-	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
-	result.resize(sz);
-	return result;
+//	auto runes = recomposing ? test_funcs::RecomposeString(s, kind) : test_funcs::DecomposeString(s, kind);
+//	std::string result;
+//	size_t sz2 = runes.size() * 4;
+//	result.resize(sz2);
+//	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
+//	result.resize(sz);
+//	return result;
 }
 
 
@@ -1048,6 +1050,8 @@ std::string normalize_str(const std::u32string &s) {
 //	result.resize(sz);
 //	return result;
 //}
+
+
 template <bool recomposing = false, DecompositionType kind>
 void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	// get start time
@@ -1055,7 +1059,45 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	int64_t duration = 0;
 	int64_t failures = 0;
 	int64_t successes = 0;
+
 	int inc = 2;
+	const char* typestr = nullptr;
+	if (kind == Canonical){
+		if (recomposing){
+			typestr = "NFC";
+		} else {
+			typestr = "NFD";
+		}
+	} else if (kind == Compatible){
+		if (recomposing){
+			typestr = "NFKC";
+		} else {
+			typestr = "NFKD";
+		}
+	}
+	auto check_func = [](const char * str){
+		IsNormalized ret = IsNormalized::Yes;
+		if (kind == Canonical){
+			if (recomposing){
+				ret =  ::quick_check_nfc(str);
+			} else {
+				ret = ::quick_check_nfd(str);
+			}
+		} else if (kind == Compatible){
+			if (recomposing){
+				ret = ::quick_check_nfkc(str);
+			} else {
+				ret = ::quick_check_nfkd(str);
+			}
+		}
+		if (ret == IsNormalized::No){
+			return false;
+		}
+		if (ret == IsNormalized::Maybe && normalize_str<recomposing, kind>(str, strlen(str)) != str){
+			return false;
+		}
+		return true;
+	};
 	const int64_t iters = table_len * TABLE_TRAVERSALS * inc;
 	for (int i = 0; i < iters; i+=inc){
 		auto a = s[i % table_len];
@@ -1063,24 +1105,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 		start = getCurrentNanos();
 		auto result = normalize_str<recomposing, kind>(a_u32);
 		duration += getCurrentNanos() - start;
-		bool is_normalized = false;
-		if (kind == Canonical){
-			if (recomposing){
-				is_normalized = test_funcs::quick_check_nfc(a_u32);
-			} else {
-				is_normalized = test_funcs::quick_check_nfd(a_u32);
-			}
-		} else if (kind == Compatible){
-			if (recomposing){
-				is_normalized = test_funcs::quick_check_nfkc(a_u32);
-			} else {
-				is_normalized = test_funcs::quick_check_nfkd(a_u32);
-			}
-		}
-
-//		start = getCurrentNanos();
-//		auto result = normalize_str<recomposing, kind>(a, strlen(a));
-//		duration += getCurrentNanos() - start;
+		bool is_normalized = check_func(result.c_str());
 		if (!is_normalized){
 			failures++;
 		} else {
@@ -1100,22 +1125,22 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	} else if (kind == DecompositionType::Compatible){
 		options = (utf8proc_option_t)(options | UTF8PROC_COMPAT);
 	}
-	printf("recompose_str conversion iters %llu, failures %lld, time : %lldms\n",iters, failures, (duration)/ 1000000);
+	printf("ucstrcase %s conversion iters %llu, failures %lld, time : %lldms\n",typestr, iters, failures, (duration)/ 1000000);
 	for (int i = 0; i < iters; i+=inc){
 		auto str = s[i % table_len];
+		const char *result;
 		start = getCurrentNanos();
-		const char *retval;
-		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&retval, options);
+		auto strsize = utf8proc_map((const uint8_t*)str, 0, (uint8_t**)&result, options);
 
 		duration += getCurrentNanos() - start;
 
-		if (strsize == 0){
+		if (strsize == 0 || !check_func(result)){
 			failures++;
 		} else {
 			successes++;
 		}
 	}
-	printf("utf8proc_map conversion iters %llu, failures %lld, time : %lldms\n",iters, failures, (duration)/ 1000000);
+	printf("utf8proc_map %s conversion iters %llu, failures %lld, time : %lldms\n",typestr, iters, failures, (duration)/ 1000000);
 
 }
 
@@ -1190,6 +1215,9 @@ int main() {
 	printf("**** Generated Matching UTF-8 strings *****\n");
 // test_quickcheck(s, TABLE_SIZE);
   test_converting<false, DecompositionType::Canonical>(s, TABLE_SIZE);
+	test_converting<true, DecompositionType::Canonical>(s, TABLE_SIZE);
+	test_converting<false, DecompositionType::Compatible>(s, TABLE_SIZE);
+	test_converting<true, DecompositionType::Compatible>(s, TABLE_SIZE);
 	return 0;
 	run_tests(s, true, TABLE_SIZE, 0, false, filters);
 	free_all_strings();

@@ -1,3 +1,4 @@
+#include <string>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 #include <stdint.h>
@@ -33,16 +34,27 @@ void nfd_test(const NormalizationTest &test, const std::string &source, const st
 
 void nfc_test(const NormalizationTest &test, const std::string &source, const std::string &test_nfc, const std::string &test_nfd,const std::string &test_nfkc, const std::string &test_nfkd){
 	{
-		std::u32string nfc_from_source = RecomposeString(source.c_str(), source.size(), DecompositionType::Canonical);
-		std::u32string nfc_from_nfc = RecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Canonical);
-		std::u32string nfc_from_nfd = RecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Canonical);
-		std::u32string nfc_from_nfkc = RecomposeString(test_nfkc.c_str(), test_nfkc.size(), DecompositionType::Canonical);
-		std::u32string nfc_from_nfkd = RecomposeString(test_nfkd.c_str(), test_nfkd.size(), DecompositionType::Canonical);
-		REQUIRE(test.nfc == nfc_from_source);
-		REQUIRE(test.nfc == nfc_from_nfc);
-		REQUIRE(test.nfc == nfc_from_nfd);
-		REQUIRE(test.nfkc == nfc_from_nfkc);
-		REQUIRE(test.nfkc == nfc_from_nfkd);
+//		std::u32string nfc_from_source = RecomposeString(source.c_str(), source.size(), DecompositionType::Canonical);
+//		std::u32string nfc_from_nfc = RecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Canonical);
+//		std::u32string nfc_from_nfd = RecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Canonical);
+//		std::u32string nfc_from_nfkc = RecomposeString(test_nfkc.c_str(), test_nfkc.size(), DecompositionType::Canonical);
+//		std::u32string nfc_from_nfkd = RecomposeString(test_nfkd.c_str(), test_nfkd.size(), DecompositionType::Canonical);
+		std::u32string nfc_from_source = ucstrcase::Recompositions<char, DecompositionType::Canonical>(source.c_str(), source.size()).to_utf32_string();
+		std::u32string nfc_from_nfc = ucstrcase::Recompositions<char, DecompositionType::Canonical>(test_nfc.c_str(), test_nfc.size()).to_utf32_string();
+		std::u32string nfc_from_nfd = ucstrcase::Recompositions<char, DecompositionType::Canonical>(test_nfd.c_str(), test_nfd.size()).to_utf32_string();
+		std::u32string nfc_from_nfkc = ucstrcase::Recompositions<char, DecompositionType::Canonical>(test_nfkc.c_str(), test_nfkc.size()).to_utf32_string();
+		std::u32string nfc_from_nfkd = ucstrcase::Recompositions<char, DecompositionType::Canonical>(test_nfkd.c_str(), test_nfkd.size()).to_utf32_string();
+		std::u32string test_nfc_u32{test.nfc};
+		std::u32string test_nfkc_u32{test.nfkc};
+
+
+
+
+		REQUIRE(test_nfc_u32 == nfc_from_source);
+		REQUIRE(test_nfc_u32 == nfc_from_nfc);
+		REQUIRE(test_nfc_u32 == nfc_from_nfd);
+		REQUIRE(test_nfkc_u32 == nfc_from_nfkc);
+		REQUIRE(test_nfkc_u32 == nfc_from_nfkd);
 	}
 }
 
