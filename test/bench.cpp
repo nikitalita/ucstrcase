@@ -1,5 +1,6 @@
 #include "normtables.h"
-
+#include "decode.h"
+#include "lookup.h"
 
 #include <unicode/stringoptions.h>
 #include <stdio.h>
@@ -496,7 +497,7 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
     } else if (string_length == 0 && isNType(type)){
       continue;
     }
-    int errors = 0;
+    size_t errors = 0;
     for (size_t i = 0; i < iters; i+=inc) {
       // worst case; string that matches
       const char* a = s[i%table_mod];
@@ -533,7 +534,7 @@ void run_tests(const char **s, bool i_plus_1_should_match = false, size_t table_
       }
     }
     stop = getCurrentNanos();
-    printf("%s iters %llu, failures %lld, time : %lldms\n",funcNames[type].c_str(), iters, errors, duration / 1000000);
+    printf("%s iters %lu, failures %ld, time : %lldms\n",funcNames[type].c_str(), iters, errors, duration / 1000000);
   }
 }
 
@@ -918,11 +919,15 @@ int new_normalizing_compare(const char *s, const char *t){
 #ifndef NDEBUG
 			char32_t *r1 = runes1.data();
 			char32_t *r2 = runes2.data();
-      std::u32string s1 = std::u32string(r1, r1 + runes1.size());
-      std::u32string s2 = std::u32string(r2, r2 + runes2.size());
+      std::u32string s1 = std::u32string(runes1.begin(), runes1.end());
+      std::u32string s2 = std::u32string(runes2.begin(), runes2.end());
 //			std::cout << "Error: new_normalizing_compare: no match for matching strings at: " << s + iter1.iter.pos << " and " << t + iter2.iter.pos << std::endl;
       // get the locale that enables printing 32 bit characters
+      // turn off deprecated-declarations for clang
+      #pragma clang diagnostic push
+      #pragma clang diagnostic ignored "-Wdeprecated-declarations"
       std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> thing;
+      #pragma clang diagnostic pop
       std::cout << thing.to_bytes(s1) << " and " << thing.to_bytes(s2) << std::endl;
 #endif
 			recomp_destroy(&iter1);
@@ -1108,12 +1113,7 @@ int main() {
 	test_dot_i();
 
   // generate a random utf-8 string
-
-//	std::vector<testType> filters = {UCSTRCASECMP, UCSTRCASECMP_N, NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, STRCASECMP, STRNCASECMP, ICU_CASE_CMP, ICU_CASE_CMP_N, UTF8CASECMP, UTF8NCASECMP, };
 	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, UTF8PROC_CASECMP, UTF8PROC_CASECMP_N};
-//	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N};
-
-
 
 	generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	printf("**** Generated Matching UTF-8 strings *****\n");

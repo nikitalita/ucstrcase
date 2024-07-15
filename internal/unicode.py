@@ -779,14 +779,22 @@ def gen_tests(tests: list[tuple[str,list]], out):
     # out.write("pub const NORMALIZATION_TESTS: &[NormalizationTest] = &[\n")
     str_literal = lambda s: 'U"%s"' % "".join("\\U%08X" % int(c,16) for c in s)
 
-    out.write("#include \"normalization_tests.h\"\n")
+    out.write("#include \"normalization_tests.h\"\n\n")
+    out.write("#include <stdint.h>\n")
+    out.write("""
+#if defined(__cplusplus) && __cplusplus >= 201103L
+#define CXX11_CONSTEXPR constexpr
+#else
+#define CXX11_CONSTEXPR
+#endif
+
+""")
     extern_decls = []
-    out.write("#include <stdint.h>\n\n")
     for i, part in enumerate(tests):
 
         part_id = "NORMALIZATION_PART_" + str(i) + "_TESTS"
         out.write("// %s\n" % part[0])
-        out.write("const NormalizationTest %s[] = {\n" % part_id)
+        out.write("CXX11_CONSTEXPR NormalizationTest %s[] = {\n" % part_id)
         for test in part[1]:
             out.write("    {\n")
             out.write("        \"%s\",\n" % test.test_name)
@@ -797,7 +805,7 @@ def gen_tests(tests: list[tuple[str,list]], out):
             out.write("        %s,\n" % str_literal(test.nfkd))
             out.write("    },\n")
         out.write("};\n\n")
-        out.write("const size_t %s_SIZE = sizeof(%s) / sizeof(%s[0]);\n\n" % (part_id, part_id, part_id))
+        out.write("CXX11_CONSTEXPR size_t %s_SIZE = sizeof(%s) / sizeof(%s[0]);\n\n" % (part_id, part_id, part_id))
         extern_decls.append(f"extern const NormalizationTest {part_id}[{len(part[1])}];\nextern const size_t {part_id}_SIZE;")
     return "\n".join(extern_decls)
 
@@ -915,20 +923,21 @@ if __name__ == '__main__':
         out.write("""
 #pragma once
 #include <stddef.h>
-#if defined(__cplusplus) && __cplusplus >= 201103L
-#include <string_view>
+#ifdef __cplusplus
+#include <cuchar>
+#define _UCS_TEST_CHAR32_T const char32_t * 
 #else
-#error "C++11 or later required"
+#define _UCS_TEST_CHAR32_T const uint32_t *
 #endif
 
-typedef struct {
-    const char* test_name;
-    std::u32string_view source;
-    std::u32string_view nfc;
-    std::u32string_view nfd;
-    std::u32string_view nfkc;
-    std::u32string_view nfkd;
-} NormalizationTest;
+struct NormalizationTest {
+    const char * test_name;
+    _UCS_TEST_CHAR32_T source;
+    _UCS_TEST_CHAR32_T nfc;
+    _UCS_TEST_CHAR32_T nfd;
+    _UCS_TEST_CHAR32_T nfkc;
+    _UCS_TEST_CHAR32_T nfkd;
+};
 
 """)
         out.write("\n".join(extern_decls))

@@ -30,7 +30,7 @@ set(UTF8_USE_SANITIZER "" CACHE STRING "Set which Clang Sanitizer to use")
 option(BUILD_TESTS "Build the tests" OFF)
 option(GENERATE_DATA "Generate the data" OFF)
 option(USE_SIMDUTF "Link against simdutf for converting strings" ON)
-
+option(EMIT_TIME_REPORT "Emit the compile time report" OFF)
 
 set(UCSTRCASE_UNICODE_VERSION "15.0.0")
 set(UCSTRCASE_CLDR_VERSION "32")
@@ -89,7 +89,7 @@ message("UCSTRCASE_CMAKE_PROJECT_CONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_CONFIG_F
 message("UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE: ${UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE}")
 message("UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE}")
 
-add_library(ucstrcase src/ucstrcase.c src/data.c src/compose.c src/normtables.c)
+add_library(ucstrcase src/ucstrcase.c src/data.c src/compose.c src/normtables.c src/decode.c src/lookup.c)
 target_include_directories(ucstrcase PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${UCSTRCASE_INCLUDE_INSTALL_DIR}>)
@@ -186,12 +186,19 @@ if(BUILD_TESTS)
   set(CATCH_CONFIG_CONSOLE_WIDTH "800")
   set(CATCH_CONFIG_COLOUR_ANSI "ON")
   add_dependencies(test_thingy simdutf-wrapper)
+
+
   add_executable(norm_tests test/run_norm_tests.cpp test/normalization_tests.cpp test/test_stuff.cpp)
   add_dependencies(norm_tests ucstrcase)
   target_include_directories(norm_tests PRIVATE include src test simdutf-wrapper/include)
   target_link_libraries(norm_tests PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
-  set(NORM_TEST_2_SOURCES test/run_norm_tests_2.cpp test/normalization_part_0_tests.cpp test/normalization_part_1_tests.cpp test/normalization_part_2_tests.cpp test/normalization_part_3_tests.cpp test/test_stuff.cpp)
+  set_target_properties(norm_tests PROPERTIES CXX_STANDARD 17)
 
+
+  # turn on the time report
+  if (EMIT_TIME_REPORT)
+    target_compile_options(norm_tests PRIVATE -ftime-report)
+  endif()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(ICU REQUIRED IMPORTED_TARGET icu-uc icu-i18n icu-io)
 
@@ -245,15 +252,9 @@ if(BUILD_TESTS)
     string(SUBSTRING "${ICU_LDFLAGS}" 0 "${ICU_LDFLAGS_POS}" ICU_LDFLAGS)
     # replace -L with /LIBPATH:
     string(REPLACE "-L" "/LIBPATH:" ICU_LDFLAGS ${ICU_LDFLAGS})
-    target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
-  else()
-    target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
   endif()
-  target_link_libraries(utf8_bench ${ICU_LIBRARIES})
-  target_link_libraries(utf8_bench ${PROJECT_NAME})
-  target_link_libraries(utf8_bench fmt::fmt)
-  target_link_libraries(utf8_bench simdutf::simdutf)
-  target_link_libraries(utf8_bench simdutf-wrapper)
+  target_link_options(utf8_bench PRIVATE ${ICU_LDFLAGS})
+  target_link_libraries(utf8_bench ${ICU_LIBRARIES} ${PROJECT_NAME} fmt::fmt simdutf::simdutf simdutf-wrapper)
 
   # print out the compile options, the linked libraries, and the linked options
   get_target_property(utf8_bench_INCLUDE_DIRS utf8_bench INCLUDE_DIRECTORIES)

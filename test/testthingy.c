@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "simdutf-wrapper.h"
+
 #include "ucstrcase.h"
 #include "compose.h"
 const char* test1 = "This is a test string.";
@@ -12,6 +13,9 @@ const char* test3 = "ﷺ";
 const char* test4 = "صلى الله عليه وسلم";
 const char* test5 = "ﷻ";
 const char* test6 = "جل جلاله";
+
+typedef uint32_t char32_t;
+
 
 size_t decompose_str(const char* str, size_t len, char32_t* output) {
 	DecompositionIter_t iter;
