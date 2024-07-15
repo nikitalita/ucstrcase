@@ -5,6 +5,43 @@
 
 namespace test_funcs {
 
+typedef IsNormalized (*QuickCheckFunc)(uint32_t c);
+
+bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind);
+inline
+bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind){
+	IsNormalized is_normalized = IsNormalized::Yes;
+	for (auto c : s){
+		auto res = quick_check(c);
+		switch(res){
+			case IsNormalized::No:
+				return false;
+			case IsNormalized::Maybe:
+				is_normalized = IsNormalized::Maybe;
+			case IsNormalized::Yes:
+				break;
+		}
+	}
+	if(is_normalized == IsNormalized::Yes){
+		return true;
+	}
+	// Maybe
+	auto cmp_str = recomposing ? RecomposeString(s, kind) : DecomposeString(s, kind);
+	return s == cmp_str;
+}
+
+bool quick_check_nfc(const std::u32string &s){
+	return is_normalized(s, is_qc_nfc, true, DecompositionType::Canonical);
+}
+bool quick_check_nfd(const std::u32string &s){
+	return is_normalized(s, is_qc_nfd, false, DecompositionType::Canonical);
+}
+bool quick_check_nfkc(const std::u32string &s){
+	return is_normalized(s, is_qc_nfkc, true, DecompositionType::Compatible);
+}
+bool quick_check_nfkd(const std::u32string &s){
+	return is_normalized(s, is_qc_nfkd, false, DecompositionType::Compatible);
+}
 char *char_utf32_to_utf8(char32_t utf32, const char *buffer)
 // Encodes the UTF-32 encoded char into a UTF-8 string.
 // Stores the result in the buffer and returns the position
@@ -26,7 +63,7 @@ char *char_utf32_to_utf8(char32_t utf32, const char *buffer)
 		*(end++) = 0b1000'0000 + static_cast<unsigned>((utf32 >> 6) & 0b0011'1111);
 		*(end++) = 0b1000'0000 + static_cast<unsigned>(utf32 & 0b0011'1111);
 	} else throw std::runtime_error("Invalid UTF-32 character");
-	*end = '\0';
+//	*end = '\0';
 	return end;
 }
 
@@ -97,4 +134,6 @@ std::string convert_utf32_to_utf8(const std::u32string &src) {
 	result.resize(sz);
 	return result;
 }
+
+
 }

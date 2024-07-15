@@ -134,6 +134,15 @@ install(FILES ${UCSTRCASE_CMAKE_VERSION_CONFIG_FILE} ${UCSTRCASE_CMAKE_PROJECT_C
 # install the pkg-config file
 install(FILES ${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE} DESTINATION "${UCSTRCASE_PKGCONFIG_INSTALL_DIR}")
 
+add_library(ucstrcase_cpp src/ucstrcase.c src/data.c src/compose.c src/normtables.c src/decode.c src/lookup.c)
+target_include_directories(ucstrcase_cpp PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${UCSTRCASE_INCLUDE_INSTALL_DIR}>)
+if (USE_SIMDUTF)
+  target_compile_definitions(ucstrcase_cpp PRIVATE UCSTRCASE_USE_SIMDUTF)
+  target_link_libraries(ucstrcase_cpp PRIVATE "$<BUILD_INTERFACE:simdutf-wrapper>")
+endif()
+set_target_properties(ucstrcase_cpp PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
 #add_dependencies(utf8_bench run_gentables)
 if (GENERATE_DATA)

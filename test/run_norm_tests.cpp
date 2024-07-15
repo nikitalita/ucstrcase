@@ -10,14 +10,20 @@ using namespace test_funcs;
 
 void nfd_test(const NormalizationTest &test, const std::string &source, const std::string &test_nfc, const std::string &test_nfd,const std::string &test_nfkc, const std::string &test_nfkd){
 	{
-		std::u32string nfd_from_source = DecomposeString(source.c_str(), source.size(), DecompositionType::Canonical);
-		std::u32string nfd_from_nfc = DecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Canonical);
-		std::u32string nfd_from_nfd = DecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Canonical);
-		std::u32string nfd_from_nfkc = DecomposeString(test_nfkc.c_str(), test_nfkc.size(),
-																								 DecompositionType::Canonical);
-		std::u32string nfd_from_nfkd = DecomposeString(test_nfkd.c_str(), test_nfkd.size(),
-																								 DecompositionType::Canonical);
-		REQUIRE(test.nfd == nfd_from_source);
+		std::u32string nfd_from_source = ucstrcase::Decompositions<char, DecompositionType::Canonical>(source.c_str(), source.size()).to_utf32_string();
+		std::u32string nfd_from_nfc = ucstrcase::Decompositions<char, DecompositionType::Canonical>(test_nfc.c_str(), test_nfc.size()).to_utf32_string();
+		std::u32string nfd_from_nfd = ucstrcase::Decompositions<char, DecompositionType::Canonical>(test_nfd.c_str(), test_nfd.size()).to_utf32_string();
+		std::u32string nfd_from_nfkc = ucstrcase::Decompositions<char, DecompositionType::Canonical>(test_nfkc.c_str(), test_nfkc.size()).to_utf32_string();
+		std::u32string nfd_from_nfkd = ucstrcase::Decompositions<char, DecompositionType::Canonical>(test_nfkd.c_str(), test_nfkd.size()).to_utf32_string();
+//		std::u32string nfd_from_nfc = DecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Canonical);
+//		std::u32string nfd_from_nfd = DecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Canonical);
+//		std::u32string nfd_from_nfkc = DecomposeString(test_nfkc.c_str(), test_nfkc.size(),
+//																								 DecompositionType::Canonical);
+//		std::u32string nfd_from_nfkd = DecomposeString(test_nfkd.c_str(), test_nfkd.size(),
+//																								 DecompositionType::Canonical);
+
+		std::u32string test_nfd_u32{test.nfd};
+		REQUIRE(test_nfd_u32 == nfd_from_source);
 		REQUIRE(test.nfd == nfd_from_nfc);
 		REQUIRE(test.nfd == nfd_from_nfd);
 		REQUIRE(test.nfkd == nfd_from_nfkc);
@@ -42,13 +48,16 @@ void nfc_test(const NormalizationTest &test, const std::string &source, const st
 
 void nfkd_test(const NormalizationTest &test, const std::string &source, const std::string &test_nfc, const std::string &test_nfd,const std::string &test_nfkc, const std::string &test_nfkd){
 	{
-		std::u32string nfkd_from_source = DecomposeString(source.c_str(), source.size(), DecompositionType::Compatible);
-		std::u32string nfkd_from_nfc = DecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Compatible);
-		std::u32string nfkd_from_nfd = DecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Compatible);
-		std::u32string nfkd_from_nfkc = DecomposeString(test_nfkc.c_str(), test_nfkc.size(),
-																					 DecompositionType::Compatible);
-		std::u32string nfkd_from_nfkd = DecomposeString(test_nfkd.c_str(), test_nfkd.size(),
-																								 DecompositionType::Compatible);
+//		std::u32string nfkd_from_source = DecomposeString(source.c_str(), source.size(), DecompositionType::Compatible);
+//		std::u32string nfkd_from_nfc = DecomposeString(test_nfc.c_str(), test_nfc.size(), DecompositionType::Compatible);
+//		std::u32string nfkd_from_nfd = DecomposeString(test_nfd.c_str(), test_nfd.size(), DecompositionType::Compatible);
+//		std::u32string nfkd_from_nfkc = DecomposeString(test_nfkc.c_str(), test_nfkc.size(), DecompositionType::Compatible);
+//		std::u32string nfkd_from_nfkd = DecomposeString(test_nfkd.c_str(), test_nfkd.size(), DecompositionType::Compatible);
+		std::u32string nfkd_from_source = ucstrcase::Decompositions<char, DecompositionType::Compatible>(source.c_str(), source.size()).to_utf32_string();
+		std::u32string nfkd_from_nfc = ucstrcase::Decompositions<char, DecompositionType::Compatible>(test_nfc.c_str(), test_nfc.size()).to_utf32_string();
+		std::u32string nfkd_from_nfd = ucstrcase::Decompositions<char, DecompositionType::Compatible>(test_nfd.c_str(), test_nfd.size()).to_utf32_string();
+		std::u32string nfkd_from_nfkc = ucstrcase::Decompositions<char, DecompositionType::Compatible>(test_nfkc.c_str(), test_nfkc.size()).to_utf32_string();
+		std::u32string nfkd_from_nfkd = ucstrcase::Decompositions<char, DecompositionType::Compatible>(test_nfkd.c_str(), test_nfkd.size()).to_utf32_string();
 		REQUIRE(test.nfkd == nfkd_from_source);
 		REQUIRE(test.nfkd == nfkd_from_nfc);
 		REQUIRE(test.nfkd == nfkd_from_nfd);
@@ -119,46 +128,6 @@ TEST_CASE("Normalization tests Part 3: PRI #29 Test") {
 	DYNAMIC_SECTION("" << testname_suffix) {
 		single_test(test);
 	}
-}
-
-#include "lookup.h"
-
-typedef IsNormalized (*QuickCheckFunc)(uint32_t c);
-
-bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind);
-inline
-bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind){
-	IsNormalized is_normalized = IsNormalized::Yes;
-	for (auto c : s){
-		auto res = quick_check(c);
-		switch(res){
-			case IsNormalized::No:
-				return false;
-			case IsNormalized::Maybe:
-				is_normalized = IsNormalized::Maybe;
-			case IsNormalized::Yes:
-				break;
-		}
-	}
-	if(is_normalized == IsNormalized::Yes){
-		return true;
-	}
-	// Maybe
-	auto cmp_str = recomposing ? RecomposeString(s, kind) : DecomposeString(s, kind);
-	return s == cmp_str;
-}
-
-bool quick_check_nfc(const std::u32string &s){
-	return is_normalized(s, is_qc_nfc, true, DecompositionType::Canonical);
-}
-bool quick_check_nfd(const std::u32string &s){
-	return is_normalized(s, is_qc_nfd, false, DecompositionType::Canonical);
-}
-bool quick_check_nfkc(const std::u32string &s){
-	return is_normalized(s, is_qc_nfkc, true, DecompositionType::Compatible);
-}
-bool quick_check_nfkd(const std::u32string &s){
-	return is_normalized(s, is_qc_nfkd, false, DecompositionType::Compatible);
 }
 
 void run_quick_test(const NormalizationTest &test){

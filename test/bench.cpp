@@ -21,6 +21,7 @@
 #include "data.h"
 #include "test_stuff.h"
 #include "ucstrcase.h"
+#include "compose.h"
 
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 100 // 2-percent chance of generating a UTF-8 character
@@ -778,7 +779,6 @@ void test_normalization(const char **s, size_t table_len = TABLE_SIZE){
 }
 
 
-#include "compose.h"
 
 void test_new_normal(){
   const uint8_t test1[] = {'c', 0xCC, 0x81, 0xCC, 0xA7, 0};
@@ -1013,9 +1013,22 @@ void test_dot_i(){
 	}
 }
 
-template <bool recomposing = false>
-std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
-	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString(s, len, kind);
+template <bool recomposing = false, DecompositionType kind>
+std::string normalize_str(const char *s, size_t len) {
+	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString2<kind>(s, len);
+	std::string result;
+	size_t sz2 = runes.size() * 4;
+	result.resize(sz2);
+	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
+	result.resize(sz);
+	return result;
+}
+template <bool recomposing = false, DecompositionType kind>
+std::string normalize_str(const std::u32string &s) {
+	if (!recomposing){
+		return ucstrcase::Decompositions<char32_t, kind>(s).to_string();
+	}
+	auto runes = recomposing ? test_funcs::RecomposeString(s, kind) : test_funcs::DecomposeString2<kind>(s);
 	std::string result;
 	size_t sz2 = runes.size() * 4;
 	result.resize(sz2);
@@ -1024,7 +1037,19 @@ std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
 	return result;
 }
 
-void test_converting(const char** s, size_t table_len = TABLE_SIZE, bool recompose = false, DecompositionType kind = DecompositionType::CanonicalCaseFold){
+
+//template <bool recomposing = false>
+//std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
+//	auto runes = recomposing ? test_funcs::RecomposeString(s, len, kind) : test_funcs::DecomposeString(s, len, kind);
+//	std::string result;
+//	size_t sz2 = runes.size() * 4;
+//	result.resize(sz2);
+//	size_t sz = simdutf::convert_utf32_to_utf8(runes.data(), runes.size(), result.data());
+//	result.resize(sz);
+//	return result;
+//}
+template <bool recomposing = false, DecompositionType kind>
+void test_converting(const char** s, size_t table_len = TABLE_SIZE){
 	// get start time
 	int64_t start = getCurrentNanos();
 	int64_t duration = 0;
@@ -1034,18 +1059,36 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE, bool recompo
 	const int64_t iters = table_len * TABLE_TRAVERSALS * inc;
 	for (int i = 0; i < iters; i+=inc){
 		auto a = s[i % table_len];
+		auto a_u32 = test_funcs::convert_utf8_to_utf32(a);
 		start = getCurrentNanos();
-		auto result = recompose ? normalize_str<true>(a, strlen(a), kind) : normalize_str<false>(a, strlen(a), kind);
+		auto result = normalize_str<recomposing, kind>(a_u32);
 		duration += getCurrentNanos() - start;
+		bool is_normalized = false;
+		if (kind == Canonical){
+			if (recomposing){
+				is_normalized = test_funcs::quick_check_nfc(a_u32);
+			} else {
+				is_normalized = test_funcs::quick_check_nfd(a_u32);
+			}
+		} else if (kind == Compatible){
+			if (recomposing){
+				is_normalized = test_funcs::quick_check_nfkc(a_u32);
+			} else {
+				is_normalized = test_funcs::quick_check_nfkd(a_u32);
+			}
+		}
 
-		if (result.empty()){
+//		start = getCurrentNanos();
+//		auto result = normalize_str<recomposing, kind>(a, strlen(a));
+//		duration += getCurrentNanos() - start;
+		if (!is_normalized){
 			failures++;
 		} else {
 			successes++;
 		}
 	}
 	auto options = (utf8proc_option_t)(UTF8PROC_NULLTERM | UTF8PROC_STABLE );
-	if (recompose){
+	if (recomposing){
 		options = (utf8proc_option_t)(options | UTF8PROC_COMPOSE);
 	} else {
 		options = (utf8proc_option_t)(options | UTF8PROC_DECOMPOSE);
@@ -1077,7 +1120,7 @@ void test_converting(const char** s, size_t table_len = TABLE_SIZE, bool recompo
 }
 
 typedef IsNormalized (*qc_func)(const char *s);
-typedef std::string (*normalize_func)(const char *s, size_t len, DecompositionType kind);
+typedef std::string (*normalize_func)(const char *s, size_t len);
 
 struct qcTestResult{
 	int64_t duration;
@@ -1085,9 +1128,9 @@ struct qcTestResult{
 	int64_t successes;
 };
 
-qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func, DecompositionType kind);
+qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func);
 inline
-qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func, DecompositionType kind){
+qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func func, normalize_func norm_func){
 	int64_t start = getCurrentNanos();
 	int64_t duration = 0;
 	int64_t failures = 0;
@@ -1097,7 +1140,7 @@ qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func fun
 	for (int i = 0; i < iters; i+=inc){
 		auto a = s[i % table_len];
 		auto a_len = strlen(a);
-		auto norm_a = norm_func(a, a_len, kind);
+		auto norm_a = norm_func(a, a_len);
 
 		start = getCurrentNanos();
 		IsNormalized result = func(norm_a.c_str());
@@ -1117,13 +1160,13 @@ qcTestResult test_quickcheck(const char **s, size_t table_len = TABLE_SIZE){
 	qcTestResult tresut;
 	int inc = 2;
 	const int64_t iters = table_len * TABLE_TRAVERSALS * inc;
-	tresut = singletest_quickcheck(s, table_len, quick_check_nfc, normalize_str<true>, DecompositionType::Canonical);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfc, normalize_str<true, DecompositionType::Canonical>);
 	printf("qc_nfc iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
-	tresut = singletest_quickcheck(s, table_len, quick_check_nfd, normalize_str<false>, DecompositionType::Canonical);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfd, normalize_str<false, DecompositionType::Canonical>);
 	printf("qc_nfd iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
-	tresut = singletest_quickcheck(s, table_len, quick_check_nfkc, normalize_str<true>, DecompositionType::Compatible);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfkc, normalize_str<true, DecompositionType::Compatible>);
 	printf("qc_nfkc iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
-	tresut = singletest_quickcheck(s, table_len, quick_check_nfkd, normalize_str<false>, DecompositionType::Compatible);
+	tresut = singletest_quickcheck(s, table_len, quick_check_nfkd, normalize_str<false, DecompositionType::Compatible>);
 	printf("qc_nfkd iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
   return tresut;
 }
@@ -1140,12 +1183,14 @@ int main() {
 	test_dot_i();
 
   // generate a random utf-8 string
-	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, UTF8PROC_CASECMP, UTF8PROC_CASECMP_N};
+	// std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N, UTF8PROC_CASECMP, UTF8PROC_CASECMP_N};
+	std::vector<testType> filters = { NEW_NORMALIZING_COMPARE, NEW_NORMALIZING_COMPARE_N};
 
 	generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	printf("**** Generated Matching UTF-8 strings *****\n");
-	test_quickcheck(s, TABLE_SIZE);
-  test_converting(s, TABLE_SIZE, true, DecompositionType::Canonical);
+// test_quickcheck(s, TABLE_SIZE);
+  test_converting<false, DecompositionType::Canonical>(s, TABLE_SIZE);
+	return 0;
 	run_tests(s, true, TABLE_SIZE, 0, false, filters);
 	free_all_strings();
 
