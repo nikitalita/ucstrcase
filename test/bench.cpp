@@ -1,26 +1,37 @@
-#include "normtables.h"
-#include "decode.h"
-#include "lookup.h"
 
-#include <unicode/stringoptions.h>
+#include <algorithm>
 #include <stdio.h>
 #include <string.h>
-#include <ucstrcase.h>
+#include <fmt/format.h>
 #include <string>
 #include <iostream>
 #include <vector>
 #include <cuchar>
+#include <simdutf.h>
 #define U_SHOW_CPLUSPLUS_API 1
 #include <unicode/unistr.h>
 #include <unicode/uchar.h>
+#include <unicode/stringoptions.h>
+
 #include "thirdparty/utf8.h"
 #include <thirdparty/utf8proc.h>
-#include <fmt/format.h>
+#include "normtables.h"
+#include "decode.h"
+#include "lookup.h"
 #include "data.h"
+#include "test_stuff.h"
+#include "ucstrcase.h"
+
 #define utf8_probability 3 // 3-percent chance of generating a UTF-8 string
 #define utf8_char_probability 100 // 2-percent chance of generating a UTF-8 character
 #define utf8_invalid_probability 20 // 1-percent chance of generating an invalid UTF-8 character
+
+// Debug builds take forever with the full table
+#ifdef BUILT_WITH_DEBUG
+#define TABLE_SIZE 10000
+#else
 #define TABLE_SIZE 1000000
+#endif
 #define TABLE_TRAVERSALS 1
 #define STRING_SIZE 200
 #define locb 0x80
@@ -271,6 +282,24 @@ char* generate_random_ascii_string(int length) {
     str[length] = '\0'; // Null-terminate the string
     return str;
 }
+
+void generate_random_matching_ascii_strings(const char** str_table, int table_size, int length) {
+  if (table_size % 2) 
+  {
+    throw std::runtime_error("Table size must be even");
+  }
+  for (int i = 0; i < table_size; i+=2) {
+      str_table[i] = generate_random_ascii_string(length);
+      char * b = strdup(str_table[i]);
+      // make it upper case
+      for (int j = 0; j < length; j++){
+        if (b[j] >= 'a' && b[j] <= 'z')
+          b[j] = ::toupper(b[j]);
+      }
+      str_table[i+1] = b;
+  }
+}
+
 
 char* generate_random_utf8_string_weighted(int length){
     int rnd = rand() % 100; // Determine if the string will be ASCII or UTF-8
@@ -916,7 +945,7 @@ int new_normalizing_compare(const char *s, const char *t){
 		runes2.push_back(rune2);
 #endif
 		if (rune1 != rune2){
-#ifndef NDEBUG
+#if !defined(NDEBUG) && defined(_UCSTRCASE_VERBOSE_TEST_OUTPUT)
 			char32_t *r1 = runes1.data();
 			char32_t *r2 = runes2.data();
       std::u32string s1 = std::u32string(runes1.begin(), runes1.end());
@@ -983,8 +1012,6 @@ void test_dot_i(){
 		std::cout << "SUCCESS: new_normalizing_compare: match for matching strings: " <<	test1_to_use << " and " << test2_to_use << std::endl;
 	}
 }
-#include <simdutf.h>
-#include "test_stuff.h"
 
 template <bool recomposing = false>
 std::string normalize_str(const char *s, size_t len, DecompositionType kind) {
@@ -1084,7 +1111,7 @@ qcTestResult singletest_quickcheck(const char **s, size_t table_len, qc_func fun
 	return {duration, failures, successes};
 }
 
-void test_quickcheck(const char **s, size_t table_len = TABLE_SIZE){
+qcTestResult test_quickcheck(const char **s, size_t table_len = TABLE_SIZE){
 	// get start time
 
 	qcTestResult tresut;
@@ -1098,13 +1125,13 @@ void test_quickcheck(const char **s, size_t table_len = TABLE_SIZE){
 	printf("qc_nfkc iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
 	tresut = singletest_quickcheck(s, table_len, quick_check_nfkd, normalize_str<false>, DecompositionType::Compatible);
 	printf("qc_nfkd iters %llu, failures %lld, time : %lldms\n",iters, tresut.failures, (tresut.duration) / 1000000);
-	test_converting(s, table_len, true, DecompositionType::Canonical);
+  return tresut;
 }
 
 
 //U"ę<Z" U"ę<z"
 int main() {
-	test_dot_i2();
+	// test_dot_i2();
   //  test_icu();
   //  return 0;
   // return 0;
@@ -1118,6 +1145,7 @@ int main() {
 	generateRandomMatchingStrings(s, TABLE_SIZE, STRING_SIZE);
 	printf("**** Generated Matching UTF-8 strings *****\n");
 	test_quickcheck(s, TABLE_SIZE);
+  test_converting(s, TABLE_SIZE, true, DecompositionType::Canonical);
 	run_tests(s, true, TABLE_SIZE, 0, false, filters);
 	free_all_strings();
 
@@ -1141,6 +1169,12 @@ int main() {
 	printf("**** Generated ASCII strings *****\n");
 	run_tests(s, false, TABLE_SIZE, 0, false, filters);
 	free_all_strings();
+
+  generate_random_matching_ascii_strings(s, TABLE_SIZE, STRING_SIZE);
+  printf("**** Generated Matching ASCII strings *****\n");
+  run_tests(s, false, TABLE_SIZE, 0, true, filters);
+  free_all_strings();
+
 
    for (int i = 0; i < TABLE_SIZE; i++) {
      s[i] = generate_random_utf8_string(STRING_SIZE);

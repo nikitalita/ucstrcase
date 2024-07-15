@@ -36,8 +36,15 @@ def batched(iterable, n):
     if batch:
         yield batch
 
+def get_unicode_version():
+    # check the args for --unicode <version>
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv):
+            if arg == "--unicode" and i + 1 < len(sys.argv):
+                return sys.argv[i + 1]
+    return "15.1.0"
 
-UNICODE_VERSION = "15.1.0"
+UNICODE_VERSION = get_unicode_version()
 UCD_URL = "https://www.unicode.org/Public/%s/ucd/" % UNICODE_VERSION
 
 PREAMBLE = """
@@ -49,7 +56,6 @@ HEADER_CONTENTS = """
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "compose.h"
 typedef struct{
     uint32_t key;
     uint16_t value;
