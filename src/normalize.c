@@ -12,44 +12,17 @@
 #include "normtables.h"
 #include "data.h"
 #include "simdutf-wrapper.h"
+#include "pragmas.h"
 typedef uint32_t char32_t;
 
-#ifndef NDEBUG
-#include <assert.h>
-#else
-#define assert(x)
-#endif
-#if defined(__GNUC__)
-#define likely(expr)    (__builtin_expect(!!(expr), 1))
-#define unlikely(expr)  (__builtin_expect(!!(expr), 0))
-#define noinline        __attribute__((noinline))
-#elif defined(_MSC_VER)
-#define likely(expr)    (expr)
-#define unlikely(expr)  (expr)
-#define noinline        __declspec(noinline)
-#else
-#define likely(expr)    (expr)
-#define unlikely(expr)  (expr)
-#define noinline
-#endif
-
-
-void tinybuf_init(TinyBuf *buf);
-TINYBUF_ELEMENT tinybuf_get(TinyBuf *buf, size_t index);
-void decomposition_iter_push_back(DecompositionIter_t *iter, uint32_t ch);
-
-
-void _void_iter_push_back(void* self, uint32_t ch);
-inline void _void_iter_push_back(void* self, uint32_t ch){
-	decomposition_iter_push_back((DecompositionIter_t *)self, ch);
-}
-
-void decomposition_iter_decompose(DecompositionIter_t *decompiter, uint32_t c) {
-  	decompose(c, _void_iter_push_back, decompiter, decompiter->kind);
-}
-
-
+/** TINYBUF */
 void tinybuf_move_to_heap(TinyBuf *buf, size_t size);
+void _expand_buf(TinyBuf *buf);
+
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define branchlessMIN(a, b) (b ^ ((a ^ b) & -(a < b)))
+
 
 inline
 void tinybuf_move_to_heap(TinyBuf *buf, size_t size) {
@@ -96,9 +69,6 @@ void tinybuf_push_back(TinyBuf *buf, DecompV value) {
 }
 
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define branchlessMIN(a, b) (b ^ ((a ^ b) & -(a < b)))
-
 void tinybuf_drain(TinyBuf *buf, uint32_t start, uint32_t end) {
   uint32_t aend = MIN(end, buf->end);
   memcpy(buf->buf_ptr + start, buf->buf_ptr + aend,
@@ -116,17 +86,15 @@ void tinybuf_truncate(TinyBuf *buf, uint32_t new_end) {
 inline TINYBUF_ELEMENT tinybuf_get(TinyBuf *buf, size_t index) {
   return buf->buf_ptr[index];
 }
-TINYBUF_ELEMENT tinybuf_pop(TinyBuf *buf);
 inline TINYBUF_ELEMENT tinybuf_pop(TinyBuf *buf) {
   return buf->buf_ptr[--buf->end];
 }
-void tinybuf_put(TinyBuf *buf, size_t index, TINYBUF_ELEMENT value);
+
 inline
 void tinybuf_put(TinyBuf *buf, size_t index, TINYBUF_ELEMENT value) {
   buf->buf_ptr[index] = value;
 }
 
-uint32_t tinybuf_size(TinyBuf *buf);
 inline uint32_t tinybuf_size(TinyBuf *buf) { return buf->end; }
 
 void tinybuf_free_heap(TinyBuf *buf) {
@@ -138,6 +106,22 @@ void tinybuf_free_heap(TinyBuf *buf) {
 	buf->end = 0;
 }
 
+
+
+/** COMPOSITION */
+
+
+void decomposition_iter_push_back(DecompositionIter_t *iter, uint32_t ch);
+
+
+void _void_iter_push_back(void* self, uint32_t ch);
+inline void _void_iter_push_back(void* self, uint32_t ch){
+	decomposition_iter_push_back((DecompositionIter_t *)self, ch);
+}
+
+void decomposition_iter_decompose(DecompositionIter_t *decompiter, uint32_t c) {
+  	decompose(c, _void_iter_push_back, decompiter, decompiter->kind);
+}
 /// You MUST call this function before using the iterator
 /// This function initializes the iterator with the given string and length
 /// and the kind of decomposition to use.

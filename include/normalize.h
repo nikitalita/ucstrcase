@@ -3,6 +3,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "compose.h"
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** TINYBUF **/
+
 typedef struct {
   uint8_t cclass;
 //	uint32_t ch : 24;
@@ -22,6 +30,20 @@ typedef struct {
   uint32_t end;
   uint32_t heap_buf_capacity;
 } TinyBuf;
+
+void tinybuf_init(TinyBuf *buf);
+uint32_t tinybuf_size(TinyBuf *buf);
+TINYBUF_ELEMENT tinybuf_get(TinyBuf *buf, size_t index);
+void tinybuf_push_back(TinyBuf *buf, DecompV value);
+void tinybuf_put(TinyBuf *buf, size_t index, TINYBUF_ELEMENT value);
+TINYBUF_ELEMENT tinybuf_pop(TinyBuf *buf);
+void tinybuf_drain(TinyBuf *buf, uint32_t start, uint32_t end);
+void tinybuf_free_heap(TinyBuf *buf);
+void tinybuf_truncate(TinyBuf *buf, uint32_t new_end);
+
+
+/** COMPOSITION **/
+
 
 typedef struct DecompositionIter{
   const char *str;
@@ -55,9 +77,7 @@ typedef struct RecompositionIter{
 } RecompositionIter_t;
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+
 void decomposition_iter_init(DecompositionIter_t *iter, const char *str,
                              size_t len, DecompositionType kind);
 uint32_t decomposition_iter_next(DecompositionIter_t *iter);
@@ -69,6 +89,7 @@ void recomp_destroy(RecompositionIter_t *recomp);
 void recomp_init(RecompositionIter_t *recomp, const char *str,
 								 size_t len, DecompositionType kind);
 uint32_t recomp_next(RecompositionIter_t *recomp);
+
 
 
 #ifdef __cplusplus
