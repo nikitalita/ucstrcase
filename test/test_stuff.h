@@ -3,7 +3,7 @@
 #define UCSTRCASE_TEST_STUFF_H
 #include <string>
 #include <vector>
-#include "compose.h"
+#include "normalize.h"
 //#include "normalization_tests.h"
 namespace test_funcs{
 

@@ -89,7 +89,7 @@ message("UCSTRCASE_CMAKE_PROJECT_CONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_CONFIG_F
 message("UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE: ${UCSTRCASE_CMAKE_PROJECT_TARGETS_FILE}")
 message("UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE: ${UCSTRCASE_CMAKE_PROJECT_PKGCONFIG_FILE}")
 
-add_library(ucstrcase src/ucstrcase.c src/data.c src/compose.c src/normtables.c src/decode.c src/lookup.c)
+add_library(ucstrcase src/ucstrcase.c src/data.c src/compose.c src/normalize.c src/normtables.c src/decode.c src/lookup.c)
 target_include_directories(ucstrcase PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${UCSTRCASE_INCLUDE_INSTALL_DIR}>)

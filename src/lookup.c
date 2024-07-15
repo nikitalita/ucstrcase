@@ -251,3 +251,12 @@ void foldMapExcludingUpperLower(uint32_t r, uint32_t result[2]) {
     result[1] = 0;
   }
 }
+
+const uint16_t * getFullCaseFold(uint32_t r){
+	uint32_t h = (r * _FullCaseFoldsSeed) >> _FullCaseFoldsShift;
+	const fullFoldPair * p = &_FullCaseFolds[h];
+	if (unlikely(p->From == r)) {
+		return p->To;
+	}
+	return NULL;
+}

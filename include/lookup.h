@@ -77,6 +77,7 @@ IsNormalized is_qc_nfkd(uint32_t c);
 uint32_t caseFold(uint32_t c);
 uint16_t *foldMap(uint32_t r);
 void foldMapExcludingUpperLower(uint32_t r, uint32_t result[2]);
+const uint16_t * getFullCaseFold(uint32_t r);
 
 #ifdef __cplusplus
 

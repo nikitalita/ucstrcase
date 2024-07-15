@@ -6,7 +6,7 @@
 #include "simdutf-wrapper.h"
 
 #include "ucstrcase.h"
-#include "compose.h"
+#include "normalize.h"
 const char* test1 = "This is a test string.";
 const char* test2 = "this IS a TEST string.";
 const char* test3 = "ﷺ";

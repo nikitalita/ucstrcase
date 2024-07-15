@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-#include "compose.h"
+#include "normalize.h"
 
 
 char * convert_utf32_to_utf8(_UCSTEST_C32PTR_T src, size_t len){
