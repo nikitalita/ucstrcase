@@ -781,17 +781,89 @@ def print_fails(tests):
             print()
 
 
+
+def get_c_char(c: str) -> str:
+#basic characters:
+# | Code unit        | Character                   | Glyph                                                    |
+# | ---------------- | --------------------------- | -------------------------------------------------------- |
+# | U+0009           | Character tabulation        |                                                          |
+# | U+000B           | Line tabulation             |                                                          |
+# | U+000C           | Form feed (FF)              |                                                          |
+# | U+0020           | Space                       |                                                          |
+# | U+0021           | Exclamation mark            | `!`                                                      |
+# | U+0022           | Quotation mark              | `"`                                                      |
+# | U+0023           | Number sign                 | `#`                                                      |
+# | U+0025           | Percent sign                | `%`                                                      |
+# | U+0026           | Ampersand                   | `&`                                                      |
+# | U+0027           | Apostrophe                  | `'`                                                      |
+# | U+0028           | Left parenthesis            | `(`                                                      |
+# | U+0029           | Right parenthesis           | `)`                                                      |
+# | U+002A           | Asterisk                    | `*`                                                      |
+# | U+002B           | Plus sign                   | `+`                                                      |
+# | U+002C           | Comma                       | `,`                                                      |
+# | U+002D           | Hyphen-minus                | `-`                                                      |
+# | U+002E           | Full stop                   | `.`                                                      |
+# | U+002F           | Solidus                     | `/`                                                      |
+# | U+0030 .. U+0039 | Digit zero .. nine          | `0 1 2 3 4 5 6 7 8 9`                                    |
+# | U+003A           | Colon                       | `:`                                                      |
+# | U+003B           | Semicolon                   | `;`                                                      |
+# | U+003C           | Less-than sign              | `<`                                                      |
+# | U+003D           | Equals sign                 | `=`                                                      |
+# | U+003E           | Greater-than sign           | `>`                                                      |
+# | U+003F           | Question mark               | `?`                                                      |
+# | U+0041 .. U+005A | Latin capital letter A .. Z | `A B C D E F G H I J K L M N O P Q R S T U V W X Y Z`    |
+# | U+005B           | Left square bracket         | `[`                                                      |
+# | U+005C           | Reverse solidus             | `\`                                                      |
+# | U+005D           | Right square bracket        | `]`                                                      |
+# | U+005E           | Circumflex accent           | `^`                                                      |
+# | U+005F           | Low line                    | `_`                                                      |
+# | U+0061 .. U+007A | Latin small letter a .. z   | `a b c d e f g h i j k l m n o p q r s t u v w x y z`    |
+# | U+007B           | Left curly bracket          | `{`                                                      |
+# | U+007C           | Vertical line               | `|`                                                      |
+# | U+007D           | Right curly bracket         | `}`                                                      |
+# | U+007E           | Tilde                       | `~`                                                      |
+    c_int = int(c,16)
+    if c_int == 0x0009:
+        return "\\t"
+    elif c_int == 0x000B:
+        return "\\v"
+    elif c_int == 0x000C:
+        return "\\f"
+    elif c_int >= 0x20 and c_int <= 0x7E:
+        # we only have to check for the basic characters we have to escape
+        if c_int == 0x0022:
+            return "\\\""
+        if c_int == 0x0027:
+            return "\'"
+        if c_int == 0x005C:
+            return "\\\\"
+        return chr(c_int)
+    return "\\U%08X" % c_int
+
+
+    
 def gen_tests(tests: list[tuple[str,list]], out):
     # out.write("pub const NORMALIZATION_TESTS: &[NormalizationTest] = &[\n")
-    str_literal = lambda s: 'U"%s"' % "".join("\\U%08X" % int(c,16) for c in s)
+    str_literal = lambda s: 'U"%s"' % "".join(get_c_char(c) for c in s)
 
-    out.write("#include \"normalization_tests.h\"\n\n")
-    out.write("#include <stdint.h>\n")
     out.write("""
-#if defined(__cplusplus) && __cplusplus >= 201103L
-#define CXX11_CONSTEXPR constexpr
+#include "normalization_tests.h"
+
+#if defined(__cplusplus) 
+    #if __cplusplus >= 201103L
+        #define CXX11_CONSTEXPR constexpr
+    #else
+        #define CXX11_CONSTEXPR const
+    #endif
 #else
-#define CXX11_CONSTEXPR
+    #define CXX11_CONSTEXPR const
+    #ifdef __STDC_VERSION__
+        #if __STDC_VERSION__ < 201112L
+            #error "Need C11 or greater to run the tests"
+        #endif
+    #else
+        #error "Need C11 or greater to run the tests"
+    #endif
 #endif
 
 """)
@@ -921,29 +993,32 @@ if __name__ == '__main__':
         out.write("\n".join(extern_decls))
 
     extern_decls = []
-    with open("test/normalization_tests.cpp", "w", newline = "\n") as out:
+    with open("test/normalization_tests.inl", "w", newline = "\n") as out:
         out.write(PREAMBLE)
         extern_decls.append(gen_tests(data.norm_tests, out))
     with open("test/normalization_tests.h", "w", newline = "\n") as out:
         out.write(PREAMBLE)
         out.write("""
 #pragma once
+#include <stdint.h>
 #include <stddef.h>
 #ifdef __cplusplus
-#include <cuchar>
-#define _UCS_TEST_CHAR32_T const char32_t * 
+#include <uchar.h>
+#define _UCSTEST_C32PTR_T const char32_t * 
+#define _UCSTEST_C32_T char32_t
 #else
-#define _UCS_TEST_CHAR32_T const uint32_t *
+#define _UCSTEST_C32PTR_T const uint32_t *
+#define _UCSTEST_C32_T uint32_t
 #endif
 
-struct NormalizationTest {
+typedef struct {
     const char * test_name;
-    _UCS_TEST_CHAR32_T source;
-    _UCS_TEST_CHAR32_T nfc;
-    _UCS_TEST_CHAR32_T nfd;
-    _UCS_TEST_CHAR32_T nfkc;
-    _UCS_TEST_CHAR32_T nfkd;
-};
+    _UCSTEST_C32PTR_T source;
+    _UCSTEST_C32PTR_T nfc;
+    _UCSTEST_C32PTR_T nfd;
+    _UCSTEST_C32PTR_T nfkc;
+    _UCSTEST_C32PTR_T nfkd;
+} NormalizationTest;
 
 """)
         out.write("\n".join(extern_decls))

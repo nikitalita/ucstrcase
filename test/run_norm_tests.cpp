@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
+#include <stdint.h>
 #include "normalization_tests.h"
 #include "compose.h"
 #include "test_stuff.h"
@@ -117,5 +118,98 @@ TEST_CASE("Normalization tests Part 3: PRI #29 Test") {
 	auto testname_suffix = get_prefix(i, test.test_name);
 	DYNAMIC_SECTION("" << testname_suffix) {
 		single_test(test);
+	}
+}
+
+#include "lookup.h"
+
+typedef IsNormalized (*QuickCheckFunc)(uint32_t c);
+
+bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind);
+inline
+bool is_normalized(const std::u32string &s, QuickCheckFunc quick_check, bool recomposing, DecompositionType kind){
+	IsNormalized is_normalized = IsNormalized::Yes;
+	for (auto c : s){
+		auto res = quick_check(c);
+		switch(res){
+			case IsNormalized::No:
+				return false;
+			case IsNormalized::Maybe:
+				is_normalized = IsNormalized::Maybe;
+			case IsNormalized::Yes:
+				break;
+		}
+	}
+	if(is_normalized == IsNormalized::Yes){
+		return true;
+	}
+	// Maybe
+	auto cmp_str = recomposing ? RecomposeString(s, kind) : DecomposeString(s, kind);
+	return s == cmp_str;
+}
+
+bool quick_check_nfc(const std::u32string &s){
+	return is_normalized(s, is_qc_nfc, true, DecompositionType::Canonical);
+}
+bool quick_check_nfd(const std::u32string &s){
+	return is_normalized(s, is_qc_nfd, false, DecompositionType::Canonical);
+}
+bool quick_check_nfkc(const std::u32string &s){
+	return is_normalized(s, is_qc_nfkc, true, DecompositionType::Compatible);
+}
+bool quick_check_nfkd(const std::u32string &s){
+	return is_normalized(s, is_qc_nfkd, false, DecompositionType::Compatible);
+}
+
+void run_quick_test(const NormalizationTest &test){
+	REQUIRE(quick_check_nfd(test.nfd));
+	REQUIRE(quick_check_nfc(test.nfc));
+	REQUIRE(quick_check_nfkd(test.nfkd));
+	REQUIRE(quick_check_nfkc(test.nfkc));
+	if (test.nfc != test.nfd){
+		REQUIRE(!quick_check_nfc(test.nfd));
+		REQUIRE(!quick_check_nfd(test.nfc));
+	}
+	if (test.nfkc != test.nfc){
+		REQUIRE(!quick_check_nfkc(test.nfc));
+		REQUIRE(quick_check_nfc(test.nfkc));
+	}
+	if (test.nfkd != test.nfd){
+		REQUIRE(!quick_check_nfkd(test.nfd));
+		REQUIRE(quick_check_nfd(test.nfkd));
+	}
+}
+
+TEST_CASE("Quick Check tests Part 0"){
+	auto i = GENERATE(Catch::Generators::range((size_t)0, (size_t)NORMALIZATION_PART_0_TESTS_SIZE));
+	const NormalizationTest &test = NORMALIZATION_PART_0_TESTS[i];
+	auto testname_suffix = get_prefix(i, test.test_name);
+	DYNAMIC_SECTION("" << testname_suffix) {
+		run_quick_test(test);
+	}
+}
+
+TEST_CASE("Quick Check tests Part 1"){
+	auto i = GENERATE(Catch::Generators::range((size_t)0, (size_t)NORMALIZATION_PART_1_TESTS_SIZE));
+	const NormalizationTest &test = NORMALIZATION_PART_1_TESTS[i];
+	auto testname_suffix = get_prefix(i, test.test_name);
+	DYNAMIC_SECTION("" << testname_suffix) {
+		run_quick_test(test);
+	}
+}
+TEST_CASE("Quick Check tests Part 2"){
+	auto i = GENERATE(Catch::Generators::range((size_t)0, (size_t)NORMALIZATION_PART_2_TESTS_SIZE));
+	const NormalizationTest &test = NORMALIZATION_PART_2_TESTS[i];
+	auto testname_suffix = get_prefix(i, test.test_name);
+	DYNAMIC_SECTION("" << testname_suffix) {
+		run_quick_test(test);
+	}
+}
+TEST_CASE("Quick Check tests Part 3"){
+	auto i = GENERATE(Catch::Generators::range((size_t)0, (size_t)NORMALIZATION_PART_3_TESTS_SIZE));
+	const NormalizationTest &test = NORMALIZATION_PART_3_TESTS[i];
+	auto testname_suffix = get_prefix(i, test.test_name);
+	DYNAMIC_SECTION("" << testname_suffix) {
+		run_quick_test(test);
 	}
 }

@@ -33,12 +33,83 @@ set(CATCH_CONFIG_CONSOLE_WIDTH "800")
 set(CATCH_CONFIG_COLOUR_ANSI "ON")
 add_dependencies(test_thingy simdutf-wrapper)
 
+# sources is a list of source files
+macro (setup_cxx_test test_name cxx_standard sources)
+  add_executable(${test_name} "${sources}")
+  add_dependencies(${test_name} ucstrcase)
+  target_include_directories(${test_name} PRIVATE ${TEST_INCLUDE_DIRS})
+  target_link_libraries(${test_name} PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
+  set_target_properties(${test_name} PROPERTIES CXX_STANDARD ${cxx_standard} CXX_STANDARD_REQUIRED ON)
+  add_test(NAME ${test_name} COMMAND ${test_name})
+endmacro()
 
-add_executable(norm_tests run_norm_tests.cpp normalization_tests.cpp test_stuff.cpp)
-add_dependencies(norm_tests ucstrcase)
-target_include_directories(norm_tests PRIVATE ${TEST_INCLUDE_DIRS})
-target_link_libraries(norm_tests PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
-set_target_properties(norm_tests PROPERTIES CXX_STANDARD 17)
+macro (setup_c_test test_name c_standard sources)
+  add_executable(${test_name} crun_norm_tests.c normalization_tests.c)
+  add_dependencies(${test_name} ucstrcase)
+  target_include_directories(${test_name} PRIVATE ${TEST_INCLUDE_DIRS})
+  target_link_libraries(${test_name} PRIVATE ucstrcase simdutf-wrapper)
+  set_target_properties(${test_name} PROPERTIES C_STANDARD ${c_standard} C_STANDARD_REQUIRED ON) 
+  add_test(NAME ${test_name} COMMAND ${test_name})
+endmacro()
+set(CXX_NORM_TEST_SOURCES run_norm_tests.cpp normalization_tests.cpp test_stuff.cpp)
+set(C_NORM_TEST_SOURCES crun_norm_tests.c normalization_tests.c)
+# add_executable(norm_tests run_norm_tests.cpp normalization_tests.cpp test_stuff.cpp)
+# add_dependencies(norm_tests ucstrcase)
+# target_include_directories(norm_tests PRIVATE ${TEST_INCLUDE_DIRS})
+# target_link_libraries(norm_tests PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
+# set_target_properties(norm_tests PROPERTIES CXX_STANDARD 17)
+
+# check if the compiler supports 23 first
+SET(MAX_CXX_STANDARD 23)
+SET(MAX_C_STANDARD 23)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10.0)
+    set(MAX_CXX_STANDARD 23)
+    set(MAX_C_STANDARD 23)
+  elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 7.0)
+    set(MAX_CXX_STANDARD 20)
+    set(MAX_C_STANDARD 11)
+  elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 5.0)
+    set(MAX_CXX_STANDARD 17)
+    set(MAX_C_STANDARD 11)
+  else()
+    set(MAX_CXX_STANDARD 14)
+    set(MAX_C_STANDARD 11)
+  endif()
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
+    set(MAX_CXX_STANDARD 23)
+    set(MAX_C_STANDARD 23)
+  endif()
+endif()
+
+# list of cxx standards to test
+set(CXX_STANDARD_LIST 11 14 17 20 23)
+# list of c standards to test
+set(C_STANDARD_LIST 11 17 23)
+
+# loop through the cxx standards
+foreach(CXX_STANDARD ${CXX_STANDARD_LIST})
+  if (CXX_STANDARD LESS_EQUAL ${MAX_CXX_STANDARD})
+    setup_cxx_test(norm_tests_cxx${CXX_STANDARD} ${CXX_STANDARD} "${CXX_NORM_TEST_SOURCES}")
+  endif()
+endforeach()
+
+#loop through the c standards
+foreach(C_STANDARD ${C_STANDARD_LIST})
+  if (C_STANDARD LESS_EQUAL ${MAX_C_STANDARD})
+    setup_c_test(norm_tests_c${C_STANDARD} ${C_STANDARD} "${C_NORM_TEST_SOURCES}")
+  endif()
+endforeach()
+
+# add_executable(norm_tests_c11 crun_norm_tests.c normalization_tests.c)
+# # set the language to c11
+# set_target_properties(norm_tests_c11 PROPERTIES C_STANDARD 11)
+# add_dependencies(norm_tests_c11 ucstrcase)
+# target_include_directories(norm_tests_c11 PRIVATE ${TEST_INCLUDE_DIRS})
+# target_link_libraries(norm_tests_c11 PRIVATE ucstrcase simdutf-wrapper Catch2::Catch2 Catch2::Catch2WithMain)
+# #set the amount of warnings tolerated to 100, if we go over then we should error out
+# target_compile_options(norm_tests_c11 PRIVATE -Werror=pointer-sign)
 
 
 # turn on the time report
@@ -117,6 +188,6 @@ message(STATUS "utf8_bench_COMPILE_OPTIONS: ${utf8_bench_COMPILE_OPTIONS}")
 message(STATUS "utf8_bench_LINK_LIBRARIES: ${utf8_bench_LINK_LIBRARIES}")
 message(STATUS "utf8_bench_LINK_OPTIONS: ${utf8_bench_LINK_OPTIONS}")
 
-add_test(NAME utf8_bench COMMAND utf8_bench)
-add_test(NAME norm_tests COMMAND norm_tests)
+# add_test(NAME utf8_bench COMMAND utf8_bench)
+
 include(CTest)

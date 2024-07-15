@@ -62,6 +62,21 @@ std::u32string RecomposeString(const char *s, size_t len, DecompositionType kind
 	return runes;
 
 }
+std::u32string RecomposeString(const std::u32string &s, DecompositionType kind) {
+	char * str = (char *)malloc(s.size() * 4 * sizeof(char));
+	size_t str_size = simdutf::convert_utf32_to_utf8(s.data(), s.size(), str);
+	auto ret = RecomposeString(str, str_size, kind);
+	free(str);
+	return ret;
+}
+
+std::u32string DecomposeString(const std::u32string &s, DecompositionType kind) {
+	char * str = (char *)malloc(s.size() * 4 * sizeof(char));
+	size_t str_size = simdutf::convert_utf32_to_utf8(s.data(), s.size(), str);
+	auto ret = DecomposeString(str, str_size, kind);
+	free(str);
+	return ret;
+}
 
 
 // Character by character test
