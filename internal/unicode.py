@@ -234,7 +234,9 @@ class UnicodeData(object):
             data = None
             if len(prop_pieces) == 3:
                 data = prop_pieces[2].strip()
-
+                if prop == "NFKC_CF":
+                    # split it into pieces
+                    data = data.split(" ")
             props[prop].append((low, high, data))
 
         return props
@@ -489,13 +491,15 @@ def calc_utf8_len(c):
         return 3
     return 4
 
-def gen_decomposition_tables(canon_decomp, compat_decomp, cjk_compat_variants_decomp, out):
-    tables = [(canon_decomp, 'canonical'), (compat_decomp, 'compatibility'), (cjk_compat_variants_decomp, 'cjk_compat_variants')]
+def gen_decomposition_tables(canon_decomp, compat_decomp, cjk_compat_variants_decomp, NFKC_CF, out):
+    tables = [(canon_decomp, 'canonical'), (compat_decomp, 'compatibility'), (cjk_compat_variants_decomp, 'cjk_compat_variants'), (NFKC_CF, 'NFKC_Casefold')]
     externs = []
     for table, name in tables:
         offsets = {}
         offset = 0
-        out.write("const uint32_t %s_DECOMPOSED_CHARS[] = {\n" % name.upper())
+        suffix_prefix = "_decomposed" if name != 'NFKC_Casefold' else ""
+        suffix = "_DECOMPOSED_CHARS" if name != 'NFKC_Casefold' else "_CHARS"
+        out.write("const uint32_t %s%s[] = {\n" % (name.upper(), suffix))
         length = 0
         max_item_len = 0
         max_item_utf8_len = 0
@@ -518,7 +522,7 @@ def gen_decomposition_tables(canon_decomp, compat_decomp, cjk_compat_variants_de
         # The largest offset must fit in a u16.
         assert offset < 65536
         out.write("};\n")
-        chars_tbl_name = "%s_DECOMPOSED_CHARS" % name.upper()
+        chars_tbl_name = "%s%s" % (name.upper(), suffix)
         out.write("const size_t %s_SIZE = sizeof(%s) / sizeof(%s[0]);\n" % (chars_tbl_name, chars_tbl_name, chars_tbl_name))
         out.write("const size_t %s_MAX_ITEM_LEN = %u;\n" % (chars_tbl_name, max_item_len))
         out.write("const size_t %s_MAX_ITEM_UTF8_LEN = %u;\n" % (chars_tbl_name, max_item_utf8_len))
@@ -526,7 +530,7 @@ def gen_decomposition_tables(canon_decomp, compat_decomp, cjk_compat_variants_de
         externs.append("extern const size_t %s_SIZE;" % chars_tbl_name)
         externs.append("extern const size_t %s_MAX_ITEM_LEN;" % chars_tbl_name)
         externs.append("extern const size_t %s_MAX_ITEM_UTF8_LEN;" % chars_tbl_name)
-        externs.append(gen_mph_data(name + '_decomposed', table, "DecomposedKV",
+        externs.append(gen_mph_data(name + suffix_prefix, table, "DecomposedKV",
             lambda k: f"{{0x{k:05X}, {{0x{offsets[k]:03X}, 0x{len(table[k]):X}}}}}", 1))
     return "\n".join(externs)
 
@@ -539,6 +543,17 @@ def flatten_prop_table(prop_table):
         else:
             flat_table[int(low, 16)] = data
     return flat_table
+
+def flatten_nfkc_cf(prop_table):
+    flat_table = {}
+    for low, high, data in prop_table:
+        if high:
+            for i in range(int(low, 16), int(high, 16) + 1):
+                flat_table[i] = [int(c,16) for c in data if c]
+        else:
+            flat_table[int(low, 16)] = [int(c,16) for c in data if c]
+    return flat_table
+
 
 def gen_qc_match(prop_table, out):
     out.write("    switch (c) {\n")
@@ -564,26 +579,26 @@ def gen_nfc_qc(prop_tables, out):
     # out.write("IsNormalized qc_nfc(uint32_t c) {\n")
     # gen_qc_match(prop_tables['NFC_QC'], out)
     # out.write("}\n")
-    return gen_prop_table('NFC_QC', prop_tables['NFC_QC'], out)
+    return gen_qc_prop_table('NFC_QC', prop_tables['NFC_QC'], out)
 
 def gen_nfkc_qc(prop_tables, out):
     # out.write("IsNormalized qc_nfkc(uint32_t c) {\n")
     # gen_qc_match(prop_tables['NFKC_QC'], out)
     # out.write("}\n")
-    return gen_prop_table('NFKC_QC', prop_tables['NFKC_QC'], out)
+    return gen_qc_prop_table('NFKC_QC', prop_tables['NFKC_QC'], out)
 
 
 def gen_nfd_qc(prop_tables, out):
     # out.write("IsNormalized qc_nfd(uint32_t c) {\n")
     # gen_qc_match(prop_tables['NFD_QC'], out)
     # out.write("}\n")
-    return gen_prop_table('NFD_QC', prop_tables['NFD_QC'], out)
+    return gen_qc_prop_table('NFD_QC', prop_tables['NFD_QC'], out)
 
 def gen_nfkd_qc(prop_tables, out):
     # out.write("IsNormalized qc_nfkd(uint32_t c) {\n")
     # gen_qc_match(prop_tables['NFKD_QC'], out)
     # out.write("}\n")
-    return gen_prop_table('NFKD_QC', prop_tables['NFKD_QC'], out)
+    return gen_qc_prop_table('NFKD_QC', prop_tables['NFKD_QC'], out)
 
 def gen_combining_mark(general_category_mark, out):
     return gen_mph_data('combining_mark', general_category_mark, 'uint32_t',
@@ -599,7 +614,7 @@ def prop_table_val_to_int(val):
         return 2
     raise ValueError("Unexpected value in prop table: %s" % val)
 
-def gen_prop_table(prop_table_name, prop_table, out):
+def gen_qc_prop_table(prop_table_name, prop_table, out):
     flat = flatten_prop_table(prop_table)
     return gen_mph_data(prop_table_name, flat, 'uint32_t',
                         lambda k: f"0x{prop_table_val_to_int(flat[k]) | (k << 8):07X}", 8)
@@ -974,7 +989,7 @@ if __name__ == '__main__':
 
         extern_decls.append(gen_composition_table(data.canon_comp, out))
 
-        extern_decls.append(gen_decomposition_tables(data.canon_fully_decomp, data.compat_fully_decomp, data.cjk_compat_variants_fully_decomp, out))
+        extern_decls.append(gen_decomposition_tables(data.canon_fully_decomp, data.compat_fully_decomp, data.cjk_compat_variants_fully_decomp, flatten_nfkc_cf(data.norm_props['NFKC_CF']), out))
 
         extern_decls.append(gen_combining_mark(data.general_category_mark, out))
 

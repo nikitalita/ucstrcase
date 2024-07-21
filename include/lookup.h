@@ -42,6 +42,8 @@ size_t compatibility_fully_decomposed(uint32_t c, const uint32_t **ret);
  */
 size_t cjk_compat_variants_fully_decomposed(uint32_t c, const uint32_t **ret);
 
+size_t NFKC_CF_decomposed(uint32_t c, const uint32_t **ret);
+
 /**
  * @brief Returns whether a character is a combining mark
  * 

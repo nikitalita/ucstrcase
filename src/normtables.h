@@ -74,6 +74,16 @@ extern const size_t CJK_COMPAT_VARIANTS_DECOMPOSED_SALT_SIZE;
 extern const DecomposedKV CJK_COMPAT_VARIANTS_DECOMPOSED_KV[1002];
 extern const size_t CJK_COMPAT_VARIANTS_DECOMPOSED_KV_SIZE;
 
+extern const uint32_t NFKC_CASEFOLD_CHARS[8251];
+extern const size_t NFKC_CASEFOLD_CHARS_SIZE;
+extern const size_t NFKC_CASEFOLD_CHARS_MAX_ITEM_LEN;
+extern const size_t NFKC_CASEFOLD_CHARS_MAX_ITEM_UTF8_LEN;
+
+extern const uint16_t NFKC_CASEFOLD_SALT[10491];
+extern const size_t NFKC_CASEFOLD_SALT_SIZE;
+extern const DecomposedKV NFKC_CASEFOLD_KV[10491];
+extern const size_t NFKC_CASEFOLD_KV_SIZE;
+
 
 extern const uint16_t COMBINING_MARK_SALT[2450];
 extern const size_t COMBINING_MARK_SALT_SIZE;

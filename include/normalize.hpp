@@ -31,15 +31,15 @@ void _decomp_iter_push_back(void* decompiter, uint32_t c);
 //forward declare Recompositions
 template<typename From, DecompositionType kind>
 class Recompositions;
+template<typename From, DecompositionType kind>
+class Decompositions;
 
 template<typename From, DecompositionType kind>
 class Decompositions
 {
     //declare _decomp_iter_push_back as friend
     friend void _decomp_iter_push_back<From, kind>(void* decompiter, uint32_t c);
-
-		//declare Recompositions of the same template type as a friend
-		friend class Recompositions<From, kind>;
+	friend class Recompositions<From, kind>;
     std::basic_string_view<From> str;
     size_t pos;
     std::vector<DecompV> buffer;
@@ -105,16 +105,16 @@ public:
 		inline std::u32string to_utf32_string();
 
 private:
-		inline size_t next_utf8(char* buf)
-		{
-			return char_utf32_to_utf8(next(), buf);
-		}
+	inline size_t next_utf8(char* buf)
+	{
+		return char_utf32_to_utf8(next(), buf);
+	}
     inline size_t len(){
         return str.size();
     }
-		inline size_t est_remaining() {
-			return str.size() - pos + buffer.size();
-		}
+	inline size_t est_remaining() {
+		return str.size() - pos + buffer.size();
+	}
     inline void case_fold(char32_t ch);
 
     inline void decompose(char32_t ch);
@@ -173,7 +173,6 @@ inline const char * Decompositions<From, kind>::to_cstring()
 
 template<typename From, DecompositionType kind>
 void Decompositions<From, kind>::case_fold(char32_t ch){
-    // NOT IMPLEMENTED!
     const uint16_t *fold = getFullCaseFold(ch);
 	if (!fold){
 			decompose(ch);
@@ -224,11 +223,11 @@ DecompV Decompositions<From, kind>::next_cc()
 template<typename From, DecompositionType kind>
 void Decompositions<From, kind>::sort_pending(){
     // sort the buffer
-		if (ready_end == buffer.size()) {
-			return;
-		}
-		auto start = buffer.begin() + ready_end;
-		auto end = buffer.end();
+	if (ready_end == buffer.size()) {
+		return;
+	}
+	auto start = buffer.begin() + ready_end;
+	auto end = buffer.end();
     std::sort(start, end, [](const DecompV& a, const DecompV& b){
         return a.cclass < b.cclass;
     });
@@ -285,7 +284,6 @@ class Recompositions
 		Finished,
 	};
 
-	//declare _decomp_iter_push_back as friend
 	Decompositions<From, kind> iter;
 	std::vector<DecompV> buffer;
 	char32_t composee;
@@ -337,10 +335,6 @@ private:
 		// TODO: Something?
 		return ch;
 	}
-//	inline DecompV ret_dv(DecompV chc) {
-//		// TODO: Something?
-//		return chc;
-//	}
 
 	inline char32_t take_composee() {
 		char32_t ch = composee;
@@ -467,8 +461,7 @@ char32_t Recompositions<From, kind>::next() {
 				if (composee != 0) {
 					return take_composee();
 				}
-			}
-				break;
+			} break;
 			case Purging: {
 				char32_t next_char = buffer.size() > state_next ? buffer[state_next].ch : 0;
 				if (next_char == 0) {
@@ -478,8 +471,7 @@ char32_t Recompositions<From, kind>::next() {
 					state_next++;
 					return ret_char(next_char);
 				}
-			}
-				break;
+			} break;
 			case Finished: {
 				char32_t next_char = buffer.size() > state_next ? buffer[state_next].ch : 0;
 				if (next_char == 0) {

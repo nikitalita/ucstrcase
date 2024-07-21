@@ -89,7 +89,7 @@ inline size_t fully_decomposed(uint32_t c, const uint32_t **ret,
                                size_t kv_len) {
 
   u16Pair result = pair_mph_lookup(c, salt, kv, salt_len, kv_len);
-  if (result.b != 0) {
+  if (*(((uint32_t *)&result)) == *(((uint32_t *)&DEFAULT_PAIR))) {
     *ret = &chars[result.a];
     return result.b;
   }
@@ -128,11 +128,18 @@ size_t canonical_fully_decomposed(uint32_t c, const uint32_t **ret) {
                           CANONICAL_DECOMPOSED_SALT_SIZE,
                           CANONICAL_DECOMPOSED_KV_SIZE);
 }
+
 size_t compatibility_fully_decomposed(uint32_t c, const uint32_t **ret) {
   return fully_decomposed(
       c, ret, COMPATIBILITY_DECOMPOSED_SALT, COMPATIBILITY_DECOMPOSED_KV,
       COMPATIBILITY_DECOMPOSED_CHARS, COMPATIBILITY_DECOMPOSED_SALT_SIZE,
       COMPATIBILITY_DECOMPOSED_KV_SIZE);
+}
+
+size_t NFKC_CF_decomposed(uint32_t c, const uint32_t **ret) {
+  return fully_decomposed(
+      c, ret, NFKC_CASEFOLD_SALT, NFKC_CASEFOLD_KV,
+      NFKC_CASEFOLD_CHARS, NFKC_CASEFOLD_SALT_SIZE, NFKC_CASEFOLD_KV_SIZE);
 }
 
 // cjk_compat_variants_fully_decomposed

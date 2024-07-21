@@ -8,6 +8,7 @@ typedef enum {
   Compatible,
   CanonicalCaseFold,
   CompatibleCaseFold,
+  NFKC_CF
 } DecompositionType;
 
 #ifdef __cplusplus

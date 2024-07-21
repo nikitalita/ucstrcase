@@ -125,6 +125,13 @@ inline void decompose(uint32_t c, PushBackFunc push_back, void *self, Decomposit
 		case CanonicalCaseFold:
 			len = canonical_fully_decomposed(c, &ret);
 			break;
+		case NFKC_CF:
+			len = NFKC_CF_decomposed(c, &ret);
+			if (len == 0){
+				// ignorable character, return
+				return;
+			}
+			break;
 
 		default:
 			assert(0 && "Invalid decomposition type");
