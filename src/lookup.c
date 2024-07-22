@@ -89,7 +89,7 @@ inline size_t fully_decomposed(uint32_t c, const uint32_t **ret,
                                size_t kv_len) {
 
   u16Pair result = pair_mph_lookup(c, salt, kv, salt_len, kv_len);
-  if (*(((uint32_t *)&result)) == *(((uint32_t *)&DEFAULT_PAIR))) {
+  if (*(((uint32_t *)&result)) != *(((uint32_t *)&DEFAULT_PAIR))) {
     *ret = &chars[result.a];
     return result.b;
   }

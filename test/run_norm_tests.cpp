@@ -47,9 +47,6 @@ void nfc_test(const NormalizationTest &test, const std::string &source, const st
 		std::u32string test_nfc_u32{test.nfc};
 		std::u32string test_nfkc_u32{test.nfkc};
 
-
-
-
 		REQUIRE(test_nfc_u32 == nfc_from_source);
 		REQUIRE(test_nfc_u32 == nfc_from_nfc);
 		REQUIRE(test_nfc_u32 == nfc_from_nfd);
